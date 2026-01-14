@@ -83,7 +83,7 @@ def go_home():
 
 # --- HOME ---
 if st.session_state.current_module == "home":
-    st.title("🏠 Panel Główny")
+    st.title("🏠 Kokpit!")
     role_color = "red" if st.session_state.user_role == "Admin" else "green"
     st.markdown(f"Zalogowany jako: **{st.session_state.user_name}** <span style='background-color:{role_color}; color:white; padding: 2px 6px; border-radius: 4px; font-size: 12px;'>{st.session_state.user_role.upper()}</span>", unsafe_allow_html=True)
     st.divider()
