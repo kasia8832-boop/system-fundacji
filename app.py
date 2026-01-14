@@ -44,35 +44,34 @@ if not st.session_state.logged_in:
         st.container(border=True)
         if st.session_state.login_mode == "login":
             st.subheader("Zaloguj się")
-            email = st.text_input("Login (Email)")
-            passwd = st.text_input("Hasło", type="password")
             
-            cb1, cb2 = st.columns(2)
-            with cb1:
-                if st.button("Wejdź", type="primary", use_container_width=True):
+            # --- ZMIANA: Otwieramy formularz ---
+            with st.form("login_form"):
+                # Dodajemy autocomplete, żeby przeglądarka wiedziała co to za pola
+                email = st.text_input("Login (Email)", autocomplete="username") 
+                passwd = st.text_input("Hasło", type="password", autocomplete="current-password")
+                
+                # Przycisk musi być teraz wewnątrz formularza
+                submitted = st.form_submit_button("Wejdź", type="primary", use_container_width=True)
+                
+                if submitted:
                     ok, name, role = crud.weryfikuj_logowanie(email, passwd)
                     if ok:
                         st.session_state.logged_in = True
                         st.session_state.user_name = name
                         st.session_state.user_role = role
                         st.success(f"Witaj {name}!")
-                        time.sleep(0.5); st.rerun()
-                    else: st.error("Błąd logowania.")
-            with cb2:
-                if st.button("Reset hasła", use_container_width=True):
-                    st.session_state.login_mode = "forgot"; st.rerun()
-        
-        elif st.session_state.login_mode == "forgot":
-            st.subheader("Reset hasła")
-            em = st.text_input("Email")
-            if st.button("Wyślij nowe hasło", type="primary", use_container_width=True):
-                ok, res = crud.resetuj_haslo(em)
-                if ok:
-                    send_email_mock(em, "Reset hasła", f"Nowe hasło: {res}")
-                    st.session_state.login_mode = "login"; st.rerun()
-                else: st.error(res)
-            if st.button("Wróć"):
-                st.session_state.login_mode = "login"; st.rerun()
+                        time.sleep(0.5)
+                        st.rerun()
+                    else: 
+                        st.error("Błąd logowania.")
+
+            # --- Koniec formularza, przyciski pomocnicze pod spodem ---
+            if st.button("Reset hasła", use_container_width=True):
+                st.session_state.login_mode = "forgot"
+                st.rerun()
+
+# ... (reszta kodu bez zmian)
     st.stop()
 
 def go_home():
