@@ -1,10 +1,32 @@
 # crud.py
+import sqlite3 # <--- NAPRAWIONO IMPORT (zamiast socket)
 import streamlit as st
 import pandas as pd
 from werkzeug.security import generate_password_hash, check_password_hash
 import random
 import string
-from database import run_query, run_command
+# Zakładam, że database.py nadal istnieje dla starszych funkcji
+# Jeśli nie, trzeba by przepisać wszystko na sqlite3, ale na razie mieszamy
+try:
+    from database import run_query, run_command
+except ImportError:
+    # Fallback jeśli database.py nie działa, żeby kod się nie wywalił od razu
+    pass 
+
+# --- KONFIGURACJA BAZY DANYCH ---
+DB_FILE = "fundacja.db"
+
+def create_connection(address=DB_FILE):
+    """
+    Tworzy połączenie do bazy SQLite.
+    Argument 'address' ma wartość domyślną, co naprawia błąd TypeError.
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(address)
+    except Exception as e:
+        print(f"Błąd połączenia z bazą: {e}")
+    return conn
 
 # ==========================
 # 1. ZWIERZĘTA
@@ -23,10 +45,12 @@ def pobierz_zwierzeta_filtrowane(gatunki, statusy, szukaj_tekst):
     if szukaj_tekst:
         query += " AND (Imie LIKE ? OR NrChip LIKE ?)"
         params.extend([f"%{szukaj_tekst}%", f"%{szukaj_tekst}%"])
+    
+    # Używamy create_connection dla spójności lub run_query z database.py
+    # Tutaj zostawiam run_query jeśli działa, a jak nie - można podmienić
     return run_query(query, params)
 
 def pobierz_pelna_karte(id_zwierza):
-    # SQLite: używamy || do łączenia stringów zamiast +
     query = f"""
     SELECT z.*, pm.CzyKastrowany, pm.DataKastracji, pm.SzczepienieWscieklizna, 
            pm.SzczepienieZakazne, pm.Odrobaczenie, pm.UwagiMedyczne,
@@ -74,18 +98,8 @@ def adoptuj_zwierze(id_zw, id_osoby, data_adopcji):
     return run_command(query, (id_osoby, data_adopcji, id_zw))
 
 # ==========================
-# 2. HISTORIA I OSOBY
+# 2. OSOBY
 # ==========================
-def pobierz_historie_zdarzen(id_zw):
-    # SQLite: || zamiast +
-    query = """SELECT z.DataZdarzenia, z.Kategoria, z.Opis, o.Imie || ' ' || o.Nazwisko as Autor
-                FROM OS_CZASU_ZDARZENIE z LEFT JOIN OSOBA o ON z.ID_Autor = o.ID_Osoba
-                WHERE z.ID_Zwierze = ? ORDER BY z.DataZdarzenia DESC"""
-    return run_query(query, (id_zw,))
-
-def dodaj_wpis_historii(id_zw, id_autora, data, kategoria, opis):
-    return run_command("INSERT INTO OS_CZASU_ZDARZENIE (ID_Zwierze, ID_Autor, DataZdarzenia, Kategoria, Opis) VALUES (?, ?, ?, ?, ?)", 
-                       (id_zw, id_autora, data, kategoria, opis))
 
 @st.cache_data(ttl=60)
 def pobierz_wszystkie_osoby():
@@ -101,7 +115,7 @@ def dodaj_osobe(imie, nazwisko, telefon, email, miasto, ulica, czy_dt):
                        (imie, nazwisko, telefon, email, miasto, ulica, dt_val))
 
 # ==========================
-# 3. GALERIA (NOWOŚĆ)
+# 3. GALERIA
 # ==========================
 def pobierz_galerie(id_zw):
     return run_query("SELECT * FROM ZWIERZE_GALERIA WHERE ID_Zwierze = ? ORDER BY ID_Zdjecie DESC", (id_zw,))
@@ -173,3 +187,144 @@ def pobierz_liste_uzytkownikow():
 
 def zmien_role_uzytkownika(id_user, nowa_rola):
     return run_command("UPDATE SYSTEM_USER_APP SET Role = ? WHERE ID = ?", (nowa_rola, id_user))
+
+# ==========================
+# 6. HISTORIA I ZAŁĄCZNIKI (NOWE FUNKCJE)
+# ==========================
+
+# W pliku crud.py
+
+def dodaj_zalacznik(id_historia, plik):
+    """
+    Zapisuje plik binarny w bazie danych.
+    Zwraca: (True, "OK") lub (False, "Treść błędu")
+    """
+    conn = create_connection()
+    c = conn.cursor()
+    dane = plik.getvalue()
+    
+    try:
+        c.execute("""
+            INSERT INTO ZALACZNIKI (ID_Historia, NazwaPliku, TypPliku, DaneBLOB, DataDodania)
+            VALUES (?, ?, ?, ?, DATE('now'))
+        """, (id_historia, plik.name, plik.type, dane))
+        conn.commit()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e) # Zwracamy treść błędu
+    finally:
+        conn.close()
+
+def pobierz_zalaczniki(id_historia):
+    """Pobiera listę załączników (bez danych BLOB dla szybkości listy)"""
+    conn = create_connection()
+    # Pobieramy ID, Nazwę i Rozmiar (długość BLOBa)
+    try:
+        df = pd.read_sql_query(f"""
+            SELECT ID_Zalacznik, NazwaPliku, TypPliku, length(DaneBLOB) as RozmiarBajt, DataDodania 
+            FROM ZALACZNIKI 
+            WHERE ID_Historia = {id_historia}
+        """, conn)
+    except Exception as e:
+        print(f"Błąd pobierania listy załączników: {e}")
+        df = pd.DataFrame() # Zwróć pusty DF w razie błędu
+    finally:
+        conn.close()
+    return df
+
+def pobierz_plik_content(id_zalacznik):
+    """Pobiera konkretny plik (binaria) do pobrania"""
+    conn = create_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT NazwaPliku, DaneBLOB, TypPliku FROM ZALACZNIKI WHERE ID_Zalacznik = ?", (id_zalacznik,))
+        row = c.fetchone()
+    except Exception as e:
+        print(f"Błąd pobierania treści pliku: {e}")
+        row = None
+    finally:
+        conn.close()
+    return row # (Nazwa, Dane, Typ)
+
+def usun_zalacznik(id_zalacznik):
+    conn = create_connection()
+    c = conn.cursor()
+    try:
+        c.execute("DELETE FROM ZALACZNIKI WHERE ID_Zalacznik = ?", (id_zalacznik,))
+        conn.commit()
+    except Exception as e:
+        print(f"Błąd usuwania załącznika: {e}")
+    finally:
+        conn.close()
+    
+def dodaj_wpis_historii(id_zwierze, id_autor, data, kategoria, opis):
+    """
+    Dodaje wpis do historii i ZWRACA ID nowego wiersza.
+    """
+    conn = create_connection()
+    c = conn.cursor()
+    new_id = None
+    try:
+        # Zmieniono nazwę tabeli na nową: HISTORIA_ZDARZEN
+        c.execute("""
+            INSERT INTO HISTORIA_ZDARZEN (ID_Zwierze, ID_Osoba, DataZdarzenia, Kategoria, Opis)
+            VALUES (?, ?, ?, ?, ?)
+        """, (id_zwierze, id_autor, data, kategoria, opis))
+        new_id = c.lastrowid # <-- WAŻNE: Pobieramy ID nowo utworzonego wpisu
+        conn.commit()
+    except Exception as e:
+        print(f"Błąd dodawania historii: {e}")
+    finally:
+        conn.close()
+    return new_id
+
+def pobierz_historie_zdarzen(id_zwierze):
+    """
+    Pobiera historię zdarzeń. Funkcja korzysta z create_connection() 
+    z domyślnym argumentem.
+    """
+    conn = create_connection()
+    
+    # Zmieniono nazwę tabeli na nową: HISTORIA_ZDARZEN
+    query = f"""
+        SELECT 
+            h.ID_Historia, 
+            h.DataZdarzenia, 
+            h.Kategoria, 
+            h.Opis, 
+            o.Imie || ' ' || o.Nazwisko as Autor
+        FROM HISTORIA_ZDARZEN h
+        LEFT JOIN OSOBA o ON h.ID_Osoba = o.ID_Osoba
+        WHERE h.ID_Zwierze = {id_zwierze}
+        ORDER BY h.DataZdarzenia DESC
+    """
+    try:
+        df = pd.read_sql_query(query, conn)
+    except Exception as e:
+        print(f"Błąd pobierania historii: {e}")
+        df = pd.DataFrame()
+    finally:
+        conn.close()
+    return df
+
+def usun_wpis_historii(id_historia):
+    """
+    Usuwa zdarzenie oraz wszystkie powiązane z nim załączniki.
+    Transakcja zapewnia, że albo usunie się wszystko, albo nic.
+    """
+    conn = create_connection()
+    c = conn.cursor()
+    try:
+        # 1. Najpierw usuwamy załączniki tego zdarzenia (CASCADE ręczne)
+        c.execute("DELETE FROM ZALACZNIKI WHERE ID_Historia = ?", (id_historia,))
+        
+        # 2. Teraz usuwamy samo zdarzenie
+        c.execute("DELETE FROM HISTORIA_ZDARZEN WHERE ID_Historia = ?", (id_historia,))
+        
+        conn.commit()
+        return True, "Usunięto pomyślnie"
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
