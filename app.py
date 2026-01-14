@@ -231,7 +231,7 @@ elif st.session_state.current_module == "registry":
     elif st.session_state.view_mode == "edit":
         if st.button("❌ Anuluj"): st.session_state.view_mode = "details"; st.rerun()
         st.header("✏️ Edycja Profilu")
-        id_zw = st.session_state.active_animal_id
+        id_zw = int(st.session_state.active_animal_id)
         r = crud.pobierz_dane_do_edycji(id_zw).iloc[0]
         
         tab_main, tab_media, tab_med = st.tabs(["Podstawowe", "Multimedia", "Medyczne"])
@@ -303,7 +303,7 @@ elif st.session_state.current_module == "registry":
     elif st.session_state.view_mode == "adoption_process":
         if st.button("❌ Anuluj"): st.session_state.view_mode = "details"; st.rerun()
         st.header("📝 Adopcja")
-        id_zw = st.session_state.active_animal_id
+        id_zw = int(st.session_state.active_animal_id)
         df_l = crud.pobierz_wszystkie_osoby()
         op_l = {f"{r['Imie']} {r['Nazwisko']}": r['ID_Osoba'] for i,r in df_l.iterrows()}
         with st.form("adpt"):
