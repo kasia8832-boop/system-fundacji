@@ -9,7 +9,7 @@ import crud
 import styles 
 
 warnings.filterwarnings('ignore') 
-st.set_page_config(page_title="Fundacja - System", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Fundacja - TESTOWE", layout="wide", initial_sidebar_state="collapsed")
 styles.apply_custom_css()
 
 # --- UTILS ---
