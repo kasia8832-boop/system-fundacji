@@ -137,8 +137,7 @@ elif st.session_state.current_module == "registry":
         else: st.warning("Brak wyników.")
 
     elif st.session_state.view_mode == "details":
-        id_zw = st.session_state.active_animal_id
-        r_df = crud.pobierz_pelna_karte(id_zw)
+        id_zw = int(st.session_state.active_animal_id)        r_df = crud.pobierz_pelna_karte(id_zw)
         if r_df.empty: st.error("Błąd: Nie znaleziono danych."); st.stop()
         r = r_df.iloc[0]
         
