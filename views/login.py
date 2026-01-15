@@ -28,11 +28,10 @@ def render_login():
                         st.session_state.logged_in = True
                         st.session_state.user_name = name
                         st.session_state.user_role = role
+                        st.session_state.user_email = email  # <--- DODAJ TĘ LINIĘ
                         st.success(f"Witaj {name}!")
                         time.sleep(0.5)
                         st.rerun()
-                    else: 
-                        st.error("Błąd logowania.")
 
             if st.button("Reset hasła", use_container_width=True):
                 st.session_state.login_mode = "forgot"

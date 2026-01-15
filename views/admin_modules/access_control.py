@@ -4,6 +4,8 @@ MODUŁ ADMINA: KONTROLA DOSTĘPU
 Zarządzanie użytkownikami systemu:
 1. Lista użytkowników (zmiana ról, reset haseł).
 2. Dodawanie nowych użytkowników.
+
+ZABEZPIECZENIE: Dostęp tylko dla roli 'Administrator'.
 """
 import streamlit as st
 import pandas as pd
@@ -21,11 +23,23 @@ def potwierdz_reset_hasla(email_user):
         if ok:
             st.success(f"Hasło zresetowane! Nowe hasło to: {wynik}")
             st.info("Przekaż to hasło użytkownikowi. Będzie widoczne tylko teraz.")
-            # Nie robimy rerun od razu, żeby admin zdążył zapisać hasło
         else:
             st.error(f"Błąd: {wynik}")
 
 def render_access_control():
+    # ============================================================
+    # 🛑 SECURITY GATE (BRAMKA BEZPIECZEŃSTWA)
+    # ============================================================
+    # Zgodnie z wymaganiami: Pracownik i Wolontariusz nie mają tu wstępu.
+    if st.session_state.user_role != "Administrator":
+        st.error("⛔ BRAK DOSTĘPU. Zarządzanie kontami jest dostępne tylko dla Administratora.")
+        # Przycisk awaryjny do powrotu
+        if st.button("Wróć"):
+            st.session_state.admin_mode = "dashboard"
+            st.rerun()
+        st.stop() # Zatrzymuje dalsze wykonywanie kodu poniżej!
+    # ============================================================
+
     st.header("🔐 Zarządzanie Dostępem")
     
     tab_lista, tab_dodaj = st.tabs(["👥 Lista użytkowników", "➕ Dodaj użytkownika"])
@@ -52,18 +66,18 @@ def render_access_control():
             c1, c2, c3 = st.columns([2, 1, 1])
             
             with c1:
-                # Zmiana roli
-                dostepne_role = ["Administrator", "Wolontariusz", "Gość"]
-                # Ustawienie indexu dla selectboxa
+                # Zmiana roli - dodano nowe role zgodnie z Twoim opisem
+                dostepne_role = ["Administrator", "Pracownik", "Wolontariusz", "Dom Tymczasowy"]
+                
                 try:
                     idx = dostepne_role.index(current_role)
                 except:
-                    idx = 1
+                    idx = 2 # Domyślnie Wolontariusz
                 
                 new_role = st.selectbox("Zmień rolę", dostepne_role, index=idx)
                 
             with c2:
-                st.write("") # Odstęp w pionie
+                st.write("") 
                 st.write("") 
                 if st.button("Zapisz rolę", use_container_width=True):
                     crud.zmien_role_uzytkownika(selected_user_id, new_role)
@@ -72,8 +86,9 @@ def render_access_control():
                     st.rerun()
             
             with c3:
-                st.write("") # Odstęp w pionie
                 st.write("") 
+                st.write("") 
+                # Reset hasła
                 if st.button("Resetuj hasło", type="primary", use_container_width=True):
                     potwierdz_reset_hasla(current_email)
 
@@ -89,16 +104,18 @@ def render_access_control():
             imie = c1.text_input("Imię")
             nazwisko = c2.text_input("Nazwisko")
             
-            email = st.text_input("Adres Email")
-            rola = st.selectbox("Rola w systemie", ["Wolontariusz", "Administrator", "Gość"])
+            email = st.text_input("Adres Email (Login)")
+            rola = st.selectbox("Rola w systemie", ["Wolontariusz", "Dom Tymczasowy", "Pracownik", "Administrator"])
+            
+            st.info("ℹ️ Hasło zostanie wygenerowane automatycznie.")
             
             if st.form_submit_button("Utwórz użytkownika", type="primary"):
                 if imie and nazwisko and email:
                     ok, wynik = crud.dodaj_uzytkownika_systemu(imie, nazwisko, email, rola)
                     if ok:
                         st.success("Konto utworzone pomyślnie!")
-                        st.warning(f"🔑 HASŁO TYMCZASOWE: **{wynik}**")
-                        st.info("Zapisz to hasło i przekaż użytkownikowi.")
+                        st.warning(f"🔑 ZAPISZ HASŁO TYMCZASOWE: **{wynik}**")
+                        st.info("Przekaż to hasło nowemu użytkownikowi.")
                     else:
                         st.error(f"Błąd: {wynik}")
                 else:

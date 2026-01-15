@@ -15,13 +15,22 @@ def render_people_db():
         
     st.header("👥 Baza Osób (DT / Adoptujący)")
     
-    t1, t2 = st.tabs(["Lista Osób", "Dodaj Osobę"])
+    role = st.session_state.user_role
     
-    with t1:
+    # Jeśli Wolontariusz -> Tylko lista, bez zakładki dodawania
+    tabs = ["Lista Osób"]
+    if role in ["Administrator", "Pracownik"]:
+        tabs.append("Dodaj Osobę")
+        
+    active_tab = st.radio("Widok", tabs, horizontal=True, label_visibility="collapsed")
+    st.write("") # odstęp
+    
+    if active_tab == "Lista Osób":
          df_os = crud.pobierz_wszystkie_osoby()
          st.dataframe(df_os, width=1000)
          
-    with t2:
+    elif active_tab == "Dodaj Osobę":
+         # To wykona się tylko dla Admina i Pracownika
          with st.form("add_os"):
              c1, c2 = st.columns(2)
              im = c1.text_input("Imię")

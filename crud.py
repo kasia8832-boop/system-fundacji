@@ -31,9 +31,19 @@ def create_connection(address=DB_FILE):
 # ==========================
 # 1. ZWIERZĘTA
 # ==========================
-def pobierz_zwierzeta_filtrowane(gatunki, statusy, szukaj_tekst):
+def pobierz_zwierzeta_filtrowane(gatunki, statusy, szukaj_tekst, id_dt_only=None):
+    """
+    id_dt_only: Jeśli podane (int), zwraca zwierzęta tylko tego opiekuna.
+    """
     query = "SELECT * FROM ZWIERZE WHERE 1=1"
     params = []
+    
+    # 1. Filtracja po DT (Najważniejsze dla bezpieczeństwa)
+    if id_dt_only is not None:
+        query += " AND ID_OpiekunTymczasowy = ?"
+        params.append(id_dt_only)
+
+    # 2. Reszta filtrów
     if gatunki:
         placeholders = ','.join('?' for _ in gatunki)
         query += f" AND Gatunek IN ({placeholders})"
@@ -46,8 +56,6 @@ def pobierz_zwierzeta_filtrowane(gatunki, statusy, szukaj_tekst):
         query += " AND (Imie LIKE ? OR NrChip LIKE ?)"
         params.extend([f"%{szukaj_tekst}%", f"%{szukaj_tekst}%"])
     
-    # Używamy create_connection dla spójności lub run_query z database.py
-    # Tutaj zostawiam run_query jeśli działa, a jak nie - można podmienić
     return run_query(query, params)
 
 def pobierz_pelna_karte(id_zwierza):
@@ -100,6 +108,13 @@ def adoptuj_zwierze(id_zw, id_osoby, data_adopcji):
 # ==========================
 # 2. OSOBY
 # ==========================
+def pobierz_id_osoby_po_emailu(email):
+    """Zwraca ID_Osoba z tabeli OSOBA na podstawie emaila (dla DT)"""
+    # Zakładamy, że email w systemie logowania = email w kartotece osób
+    res = run_query("SELECT ID_Osoba FROM OSOBA WHERE Email = ?", (email,))
+    if not res.empty:
+        return res.iloc[0]['ID_Osoba']
+    return None
 
 @st.cache_data(ttl=60)
 def pobierz_wszystkie_osoby():

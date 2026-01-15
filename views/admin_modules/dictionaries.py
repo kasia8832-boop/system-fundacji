@@ -14,5 +14,10 @@ def render_dictionaries():
         st.rerun()
         
     st.header("📚 Słowniki Systemowe")
-    st.info("Ta funkcja będzie dostępna w kolejnej wersji systemu.")
-    st.write("Tutaj administrator będzie mógł dodawać nowe gatunki zwierząt lub typy zabiegów medycznych.")
+    role = st.session_state.user_role
+    
+    if role == "Wolontariusz":
+        st.info("ℹ️ Jako Wolontariusz masz tylko podgląd słowników. Edycja jest zablokowana.")
+        # Tu możesz wyświetlić listy (read-only)
+    else:
+        st.write("Tutaj administrator i pracownik mogą edytować słowniki.")

@@ -10,19 +10,24 @@ import streamlit as st
 from views.admin_modules import dashboard, access_control, people_db, dictionaries
 
 def render_admin():
-    # 1. SECURITY CHECK - Sprawdzamy czy user to Admin
-    if st.session_state.user_role != "Admin":
-        st.error("⛔ BRAK DOSTĘPU - Ten moduł jest tylko dla Administratorów.")
+    role = st.session_state.user_role
+    
+    # 1. SECURITY CHECK - Dom Tymczasowy w ogóle tu nie wchodzi
+    if role == "Dom Tymczasowy":
+        st.error("⛔ BRAK DOSTĘPU - Ten moduł jest niedostępny dla Domów Tymczasowych.")
+        if st.button("Wróć"):
+            st.session_state.current_module = "home"
+            st.rerun()
         st.stop()
         
-    # 2. Pasek nawigacji powrotu do Home
+    # 2. Pasek nawigacji
     c_n, c_t = st.columns([1, 6])
     with c_n: 
         if st.button("🏠 Menu Gł.", use_container_width=True): 
             st.session_state.current_module = "home"
             st.rerun()
     with c_t: 
-        st.subheader("Panel Administracyjny")
+        st.subheader(f"Panel Administracyjny ({role})")
     
     st.divider()
 
@@ -33,7 +38,11 @@ def render_admin():
         dashboard.render_dashboard()
         
     elif mode == "access":
-        access_control.render_access_control()
+        # DODATKOWE ZABEZPIECZENIE: Tylko Admin wchodzi w hasła
+        if role != "Administrator": # Pracownik i Wolontariusz nie mogą
+            st.error("⛔ Brak uprawnień do zarządzania kontami.")
+        else:
+            access_control.render_access_control()
         
     elif mode == "users":
         people_db.render_people_db()
@@ -43,6 +52,3 @@ def render_admin():
         
     else:
         st.warning(f"Nieznany tryb admina: {mode}")
-        if st.button("Resetuj widok"):
-            st.session_state.admin_mode = "dashboard"
-            st.rerun()
