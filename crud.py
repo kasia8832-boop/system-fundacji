@@ -142,11 +142,32 @@ def dodaj_zdjecie_galerii(id_zw, url, opis):
 # 4. SŁOWNIKI
 # ==========================
 @st.cache_data(ttl=600)
+# ==========================
+# 4. SŁOWNIKI
+# ==========================
+@st.cache_data(ttl=60) # Zmniejszamy TTL, żeby zmiany były widoczne szybciej
 def pobierz_liste_slownika(nazwa_tabeli):
     whitelist = ["SLOWNIK_GATUNEK", "SLOWNIK_STATUS", "SLOWNIK_ZRODLO", "SLOWNIK_KATEGORIA"]
     if nazwa_tabeli not in whitelist: return []
     df = run_query(f"SELECT Wartosc FROM {nazwa_tabeli} ORDER BY Wartosc")
     return df['Wartosc'].tolist() if not df.empty else []
+
+def dodaj_element_slownika(nazwa_tabeli, wartosc):
+    whitelist = ["SLOWNIK_GATUNEK", "SLOWNIK_STATUS", "SLOWNIK_ZRODLO", "SLOWNIK_KATEGORIA"]
+    if nazwa_tabeli not in whitelist: return False, "Niedozwolona tabela"
+    
+    # Sprawdzenie czy już istnieje
+    check = run_query(f"SELECT Wartosc FROM {nazwa_tabeli} WHERE Wartosc = ?", (wartosc,))
+    if not check.empty:
+        return False, "Taka wartość już istnieje."
+        
+    return run_command(f"INSERT INTO {nazwa_tabeli} (Wartosc) VALUES (?)", (wartosc,)), "Dodano pomyślnie"
+
+def usun_element_slownika(nazwa_tabeli, wartosc):
+    whitelist = ["SLOWNIK_GATUNEK", "SLOWNIK_STATUS", "SLOWNIK_ZRODLO", "SLOWNIK_KATEGORIA"]
+    if nazwa_tabeli not in whitelist: return False, "Niedozwolona tabela"
+    
+    return run_command(f"DELETE FROM {nazwa_tabeli} WHERE Wartosc = ?", (wartosc,)), "Usunięto pomyślnie"
 
 # ==========================
 # 5. BEZPIECZEŃSTWO

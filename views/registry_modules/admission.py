@@ -20,6 +20,8 @@ def render_admission():
     st.header("📝 Przyjęcie")
     sl_gat = crud.pobierz_liste_slownika("SLOWNIK_GATUNEK")
     sl_stat = crud.pobierz_liste_slownika("SLOWNIK_STATUS")
+    
+    # NOWE: Pobieranie źródła z bazy zamiast na sztywno
     sl_zrodlo = crud.pobierz_liste_slownika("SLOWNIK_ZRODLO")
     df_dt = crud.pobierz_liste_dt()
     dt_opts = {"Brak": None}
