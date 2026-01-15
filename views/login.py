@@ -12,7 +12,7 @@ import crud
 def render_login():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown("<h1 style='text-align: center;'>🔐 System Fundacji</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center;'>🔐 Witaj po tej Mostu</h1>", unsafe_allow_html=True)
         st.container(border=True)
         
         if st.session_state.login_mode == "login":
