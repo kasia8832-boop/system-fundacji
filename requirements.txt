@@ -4,3 +4,4 @@ werkzeug
 requests
 streamlit-lottie
 pytz
+pytest
