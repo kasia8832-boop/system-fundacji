@@ -1,15 +1,29 @@
 import streamlit as st
 import warnings
 import styles
+from services import maintenance
+
 
 # Importujemy nasze nowe widoki
 from views import login, home, registry, admin
 
-# Konfiguracja
+# --- KONFIGURACJA STARTOWA ---
 warnings.filterwarnings('ignore') 
-st.set_page_config(page_title="Fundacja - SYSTEM", layout="wide", initial_sidebar_state="collapsed")
-styles.apply_custom_css()
+st.set_page_config(page_title="Fundacja - SYSTEM", layout="wide")
 
+# ==========================================
+# 🕒 AUTOMATYCZNY BACKUP W TLE (NOWOŚĆ)
+# ==========================================
+@st.cache_resource
+def init_backup_system():
+    """Uruchamia wątek backupu tylko raz przy starcie serwera"""
+    maintenance.start_background_backup()
+    return True
+
+init_backup_system()
+# ==========================================
+
+styles.apply_custom_css()
 # --- STAN APLIKACJI (Inicjalizacja) ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'user_name' not in st.session_state: st.session_state.user_name = "User"

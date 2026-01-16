@@ -3,3 +3,4 @@ pandas
 werkzeug
 requests
 streamlit-lottie
+pytz

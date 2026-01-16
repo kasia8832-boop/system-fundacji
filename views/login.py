@@ -7,7 +7,7 @@ Integruje frontend z email_service.
 import streamlit as st
 import time
 import crud
-import email_service  # <--- Musi być zaimportowane!
+from services import email_service
 
 def render_login():
     # Centrowanie formularza na ekranie
