@@ -2,11 +2,11 @@
 MODUŁ ADMINA: BAZA OSÓB (CRM)
 -----------------------------
 Baza danych osób fizycznych powiązanych z fundacją.
-Są to Domy Tymczasowe (DT) oraz osoby Adoptujące.
-Moduł pozwala na przeglądanie listy kontaktów i dodawanie nowych osób.
+Wersja 2.0: Dostosowana do nowego CRUD (DataRejestracji, Rola).
 """
 import streamlit as st
 import crud
+import pandas as pd
 
 def render_people_db():
     if st.button("⬅️ Wróć do Pulpitu"): 
@@ -17,31 +17,59 @@ def render_people_db():
     
     role = st.session_state.user_role
     
-    # Jeśli Wolontariusz -> Tylko lista, bez zakładki dodawania
+    # Zakładki nawigacyjne
     tabs = ["Lista Osób"]
     if role in ["Administrator", "Pracownik"]:
         tabs.append("Dodaj Osobę")
         
     active_tab = st.radio("Widok", tabs, horizontal=True, label_visibility="collapsed")
-    st.write("") # odstęp
+    st.divider()
     
+    # --- WIDOK 1: LISTA OSÓB ---
     if active_tab == "Lista Osób":
-         df_os = crud.pobierz_wszystkie_osoby()
-         st.dataframe(df_os, width=1000)
+         # Nowa funkcja CRUD
+         df_os = crud.get_all_people()
          
-    elif active_tab == "Dodaj Osobę":
-         # To wykona się tylko dla Admina i Pracownika
-         with st.form("add_os"):
-             c1, c2 = st.columns(2)
-             im = c1.text_input("Imię")
-             nz = c2.text_input("Nazwisko")
-             tel = c1.text_input("Telefon")
-             em = c2.text_input("Email")
-             mi = c1.text_input("Miasto")
-             ul = c2.text_input("Ulica")
-             dt = st.checkbox("Czy ta osoba to Dom Tymczasowy (DT)?")
+         if not df_os.empty:
+             st.dataframe(
+                 df_os, 
+                 column_config={
+                     "DataRejestracji": st.column_config.DateColumn("Rejestracja", format="DD.MM.YYYY"),
+                     "Imie": "Imię",
+                     "Nazwisko": "Nazwisko",
+                     "Rola": "Typ Kontaktu",
+                     "Telefon": "Telefon",
+                     "Email": "E-mail",
+                     "Miasto": "Miasto"
+                 },
+                 use_container_width=True,
+                 hide_index=True
+             )
+         else:
+             st.info("Baza osób jest pusta.")
              
-             if st.form_submit_button("Dodaj do bazy"):
-                 crud.dodaj_osobe(im, nz, tel, em, mi, ul, dt)
-                 st.success("Dodano osobę!")
-                 st.rerun()
+    # --- WIDOK 2: DODAJ OSOBĘ ---
+    elif active_tab == "Dodaj Osobę":
+         st.subheader("➕ Nowy Kontakt")
+         with st.form("add_os_form"):
+             c1, c2 = st.columns(2)
+             with c1:
+                 im = st.text_input("Imię")
+                 tel = st.text_input("Telefon")
+                 mi = st.text_input("Miasto")
+             with c2:
+                 nz = st.text_input("Nazwisko")
+                 em = st.text_input("Email")
+                 # Zamiast checkboxa 'Czy DT', wybieramy Rolę (zgodnie z nowym CRUD)
+                 rola_osoby = st.selectbox("Rola / Typ Kontaktu", ["Adoptujący", "Dom Tymczasowy", "Wolontariusz", "Inny"])
+             
+             # Usunięto pole "Ulica", bo nowy crud.add_person go nie obsługuje
+             
+             if st.form_submit_button("Zapisz w bazie", type="primary"):
+                 if im and nz:
+                     # Wywołanie nowej funkcji CRUD
+                     crud.add_person(im, nz, rola_osoby, tel, em, mi)
+                     st.success(f"Dodano osobę: {im} {nz}")
+                     st.rerun()
+                 else:
+                     st.warning("Imię i Nazwisko są wymagane.")

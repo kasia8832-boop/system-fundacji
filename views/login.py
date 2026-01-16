@@ -2,12 +2,13 @@
 WIDOK: LOGOWANIE I RESET HASŁA
 ------------------------------
 Obsługuje logowanie oraz dwuetapowy proces odzyskiwania hasła.
-Integruje frontend z email_service.
+Wersja 2.0: Poprawiono wywołanie funkcji logowania (verify_user).
 """
 import streamlit as st
 import time
 import crud
-from services import email_service
+# Upewnij się, że utworzyłeś folder services i plik email_service.py
+from services import email_service 
 
 def render_login():
     # Centrowanie formularza na ekranie
@@ -31,33 +32,35 @@ def render_login():
                 submitted = st.form_submit_button("Wejdź", type="primary", use_container_width=True)
                 
                 if submitted:
-                    ok, name, role = crud.weryfikuj_logowanie(email, passwd)
-                    if ok:
+                    # --- ZMIANA TUTAJ ---
+                    # Nowy CRUD zwraca (role, name) lub (None, None)
+                    role, name = crud.verify_user(email, passwd)
+                    
+                    if role: # Jeśli rola istnieje, logowanie udane
                         st.session_state.logged_in = True
                         st.session_state.user_name = name
                         st.session_state.user_role = role
-                        st.session_state.user_email = email
+                        st.session_state.user_email = email # lub login
                         st.success(f"Witaj {name}!")
                         time.sleep(0.5)
                         st.rerun()
                     else: 
                         st.error("Błędny email lub hasło.")
+                    # --------------------
 
-            # --- TO JEST TEN NOWY PRZYCISK ---
             st.write("")
             if st.button("Nie pamiętam hasła ❓", use_container_width=True):
                 st.session_state.login_mode = "forgot_request"
                 st.rerun()
-            # ---------------------------------
 
         # ======================================================
         # TRYB 2: RESET - KROK 1 (PODAJ EMAIL)
         # ======================================================
         elif st.session_state.login_mode == "forgot_request":
             st.subheader("Reset hasła (Krok 1/2)")
-            st.info("Podaj adres e-mail powiązany z kontem. Wyślemy na niego kod weryfikacyjny.")
+            st.info("Podaj login/email. Wygenerujemy kod weryfikacyjny.")
             
-            email_reset = st.text_input("Twój Email")
+            email_reset = st.text_input("Twój Login/Email")
             
             c_b1, c_b2 = st.columns(2)
             with c_b1:
@@ -66,33 +69,32 @@ def render_login():
                     st.rerun()
             with c_b2:
                 if st.button("Wyślij kod 📩", type="primary"):
-                    # 1. Generujemy kod w bazie
+                    # 1. Generujemy kod w bazie (Funkcja przywrócona w CRUD)
                     ok, wynik = crud.inicjuj_reset_hasla(email_reset)
                     
                     if ok:
-                        # 2. Wysyłamy kod mailem (wynik = kod np. 123456)
-                        with st.spinner("Wysyłanie e-maila..."):
-                            sent_ok, msg = email_service.wyslij_email_resetu(email_reset, wynik)
+                        # 2. Symulujemy wysyłkę maila
+                        # wynik to kod (np. 123456)
+                        sent_ok, msg = email_service.wyslij_email_resetu(email_reset, wynik)
                         
                         if sent_ok:
-                            st.session_state.reset_email = email_reset # Zapamiętujemy email do następnego kroku
+                            st.session_state.reset_email = email_reset
                             st.session_state.login_mode = "forgot_verify"
-                            st.success("Kod został wysłany! Sprawdź skrzynkę.")
-                            time.sleep(1)
+                            # Wyświetlamy kod w zielonym pasku (dla testów, bo nie ma SMTP)
+                            st.success(msg) 
+                            time.sleep(2)
                             st.rerun()
                         else:
-                            st.error(msg) # Błąd wysyłki maila
+                            st.error(msg)
                     else:
-                        # Błąd bazy (np. nie ma takiego emaila)
-                        st.error(wynik)
+                        st.error(wynik) # np. Nie ma takiego usera
 
         # ======================================================
         # TRYB 3: RESET - KROK 2 (WPISZ KOD I NOWE HASŁO)
         # ======================================================
         elif st.session_state.login_mode == "forgot_verify":
             st.subheader("Reset hasła (Krok 2/2)")
-            st.success(f"Kod wysłano na: **{st.session_state.get('reset_email', '')}**")
-            st.caption("Jeśli nie widzisz maila, sprawdź folder SPAM.")
+            st.info(f"Wpisz kod dla: **{st.session_state.get('reset_email', '')}**")
             
             with st.form("reset_final"):
                 kod = st.text_input("Kod weryfikacyjny (6 cyfr)")
@@ -105,7 +107,7 @@ def render_login():
                     elif len(new_pass) < 4:
                         st.error("Hasło jest za krótkie (min. 4 znaki).")
                     else:
-                        # Finalizacja w bazie
+                        # Finalizacja w bazie (Funkcja przywrócona w CRUD)
                         email_u = st.session_state.get('reset_email')
                         ok, msg = crud.finalizuj_reset_hasla(email_u, kod, new_pass)
                         
@@ -116,7 +118,7 @@ def render_login():
                             st.session_state.login_mode = "login"
                             st.rerun()
                         else:
-                            st.error(msg) # np. Zły kod
+                            st.error(msg)
             
             if st.button("Anuluj"):
                 st.session_state.login_mode = "login"

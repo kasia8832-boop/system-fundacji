@@ -1,52 +1,62 @@
 """
 MODUŁ REJESTRU: PRZYJĘCIE (NOWE ZWIERZĘ)
 ----------------------------------------
-Formularz dodawania nowego podopiecznego do bazy.
-Obsługuje wprowadzanie danych podstawowych i przypisanie do Domu Tymczasowego.
+Szybki formularz dodawania nowego podopiecznego.
+Tworzy kartę zwierzęcia. Szczegóły (Chip, Data Urodzenia, Zdjęcia) 
+dodaje się w trybie Edycji po utworzeniu rekordu.
 """
-
-#przyjęcie_zwierzecia
-
 import streamlit as st
-from datetime import date
 import time
 import crud
 
 def render_admission():
+    # Przycisk Anuluj
     if st.button("❌ Anuluj"): 
         st.session_state.view_mode = "list"
         st.rerun()
         
-    st.header("📝 Przyjęcie")
-    sl_gat = crud.pobierz_liste_slownika("SLOWNIK_GATUNEK")
-    sl_stat = crud.pobierz_liste_slownika("SLOWNIK_STATUS")
+    st.header("📝 Przyjęcie nowego podopiecznego")
+    st.info("Tutaj tworzysz podstawową kartę. Chip, datę urodzenia i opis dodasz w edycji po utworzeniu.")
+
+    # 1. Pobieranie słowników (Nowe nazwy funkcji z crud.py)
+    # Używamy try/except na wypadek gdyby słowniki były puste
+    try:
+        sl_gat = crud.get_dictionary("SLOWNIK_GATUNKI")
+        sl_stat = crud.get_dictionary("SLOWNIK_STATUSY")
+    except:
+        sl_gat = ["Pies", "Kot"]
+        sl_stat = ["Do adopcji", "Kwarantanna"]
     
-    # NOWE: Pobieranie źródła z bazy zamiast na sztywno
-    sl_zrodlo = crud.pobierz_liste_slownika("SLOWNIK_ZRODLO")
-    df_dt = crud.pobierz_liste_dt()
-    dt_opts = {"Brak": None}
-    for i, r in df_dt.iterrows(): dt_opts[f"{r['Imie']} {r['Nazwisko']}"] = r['ID_Osoba']
-    
-    with st.form("adm"):
+    # 2. Formularz
+    with st.form("adm_form"):
         c1, c2 = st.columns(2)
+        
         with c1:
-            im = st.text_input("Imię")
-            gt = st.selectbox("Gatunek", sl_gat)
-            pl = st.radio("Płeć", ["Samiec", "Samica"], horizontal=True)
-            ch = st.text_input("Chip")
-            dt = st.selectbox("DT", list(dt_opts.keys()))
-        with c2:
-            ur = st.date_input("Urodzenie", date(2020,1,1))
-            stt = st.selectbox("Status", sl_stat)
-            src = st.selectbox("Źródło", sl_zrodlo)
-            olx = st.checkbox("OLX"); www = st.checkbox("WWW")
+            imie = st.text_input("Imię")
+            gatunek = st.selectbox("Gatunek", sl_gat)
             
-        if st.form_submit_button("Zapisz", type="primary"):
-            if im:
-                crud.dodaj_zwierze(im, gt, pl, ch, ur, stt, src, olx, www, dt_opts[dt])
-                st.success("Dodano!")
+        with c2:
+            plec = st.radio("Płeć", ["Samiec", "Samica", "Nieznana"], horizontal=True)
+            status = st.selectbox("Status", sl_stat)
+            
+        # UWAGA: Usunęliśmy pola Chip, Urodzenie, Źródło, DT, OLX, WWW
+        # ponieważ funkcja crud.add_animal() w nowej wersji ich nie obsługuje
+        # (zostały przeniesione do edycji szczegółowej).
+            
+        submitted = st.form_submit_button("💾 Utwórz Kartę", type="primary")
+        
+        if submitted:
+            if imie:
+                # Wywołujemy nową, uproszczoną funkcję z crud.py
+                new_id = crud.add_animal(imie, gatunek, plec, status)
+                
+                st.success(f"Dodano zwierzę! Nadano ID: {new_id}")
                 time.sleep(1)
-                st.session_state.view_mode = "list"
+                
+                # Automatyczne przekierowanie do edycji tego zwierzęcia
+                # żeby użytkownik mógł od razu uzupełnić resztę danych
+                st.session_state.active_animal_id = new_id
+                st.session_state.view_mode = "details" # lub "edit" zależnie od preferencji
                 st.rerun()
             else: 
-                st.error("Brak imienia")
+                st.error("Imię jest wymagane!")

@@ -40,7 +40,7 @@ def render_alerts_config():
             "DniWaznosci": st.column_config.NumberColumn(
                 "Ważność (dni)",
                 help="Ile dni od zabiegu jest ważny?",
-                min_value=1,
+                min_value=0,
                 max_value=3650,
                 step=1
             ),
