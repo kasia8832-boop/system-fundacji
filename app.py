@@ -1,18 +1,22 @@
 import streamlit as st
+
+# ==============================================================================
+# 🚨 KONFIGURACJA STRONY (Musi być na samej górze!)
+# ==============================================================================
+st.set_page_config(page_title="Fundacja - SYSTEM", layout="wide")
+
 import warnings
 import styles
 from services import maintenance
 
-
-# Importujemy nasze nowe widoki
-from views import login, home, registry, admin
+# Importujemy widoki (w tym notifications)
+from views import login, home, registry, admin, notifications
 
 # --- KONFIGURACJA STARTOWA ---
 warnings.filterwarnings('ignore') 
-st.set_page_config(page_title="Fundacja - SYSTEM", layout="wide")
 
 # ==========================================
-# 🕒 AUTOMATYCZNY BACKUP W TLE (NOWOŚĆ)
+# 🕒 AUTOMATYCZNY BACKUP W TLE
 # ==========================================
 @st.cache_resource
 def init_backup_system():
@@ -24,7 +28,8 @@ init_backup_system()
 # ==========================================
 
 styles.apply_custom_css()
-# --- STAN APLIKACJI (Inicjalizacja) ---
+
+# --- STAN APLIKACJI (Inicjalizacja zmiennych sesji) ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'user_name' not in st.session_state: st.session_state.user_name = "User"
 if 'user_role' not in st.session_state: st.session_state.user_role = "Wolontariusz"
@@ -34,8 +39,8 @@ if 'view_mode' not in st.session_state: st.session_state.view_mode = "list"
 if 'active_animal_id' not in st.session_state: st.session_state.active_animal_id = None
 if 'admin_mode' not in st.session_state: st.session_state.admin_mode = "dashboard"
 
-# --- GŁÓWNY ROUTER (Kierownik Ruchu) ---
 
+# --- GŁÓWNY ROUTER (Kierownik Ruchu) ---
 def main():
     # 1. Jeśli niezalogowany -> Pokaż Login
     if not st.session_state.logged_in:
@@ -53,6 +58,10 @@ def main():
         
     elif module == "admin":
         admin.render_admin()
+
+    elif module == "notifications":
+        # Tutaj wywołujemy funkcję z zaimportowanego pliku, a nie definujemy jej tutaj!
+        notifications.render_notifications()
         
     else:
         st.error(f"Nieznany moduł: {module}")

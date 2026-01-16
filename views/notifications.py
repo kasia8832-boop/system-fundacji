@@ -1,0 +1,51 @@
+"""
+WIDOK: CENTRUM POWIADOMIEŃ
+--------------------------
+Wyświetla listę zwierząt wymagających interwencji medycznej.
+Pozwala jednym kliknięciem przejść do karty danego zwierzaka.
+"""
+import streamlit as st
+import crud
+import pandas as pd
+
+def render_notifications():
+    st.title("🔔 Centrum Powiadomień")
+    
+    # Przycisk powrotu
+    if st.button("⬅️ Wróć do Kokpitu"):
+        st.session_state.current_module = "home"
+        st.rerun()
+        
+    st.divider()
+    
+    # 1. Pobranie danych z logiki biznesowej
+    lista_alertow = crud.pobierz_alerty_medyczne()
+    
+    if not lista_alertow:
+        st.balloons()
+        st.success("Wszystko w porządku! Żaden podopieczny nie ma zaległych szczepień ani odrobaczeń.")
+        return
+
+    st.warning(f"⚠️ Znaleziono {len(lista_alertow)} zadań wymagających uwagi.")
+    
+    # 2. Wyświetlanie jako tabela z akcjami
+    # Iterujemy po liście i tworzymy wiersze
+    for alert in lista_alertow:
+        with st.container(border=True):
+            c1, c2, c3 = st.columns([1, 4, 2])
+            
+            with c1:
+                st.write("🐕" if "Szczepienie" in alert['komunikat'] else "💊")
+                
+            with c2:
+                st.markdown(f"**{alert['imie']}** (Chip: {alert['chip'] or 'Brak'})")
+                st.error(alert['komunikat'])
+                
+            with c3:
+                # Przycisk przenoszący do szczegółów zwierzęcia
+                # Ustawiamy odpowiednie stany sesji, aby Registry wiedziało co pokazać
+                if st.button("Idź do karty ➡️", key=f"alert_{alert['id']}_{alert['komunikat']}"):
+                    st.session_state.current_module = "registry"
+                    st.session_state.view_mode = "details"
+                    st.session_state.active_animal_id = alert['id']
+                    st.rerun()

@@ -7,7 +7,7 @@ Weryfikuje uprawnienia (Security Check) i kieruje do odpowiedniego pod-modułu
 """
 import streamlit as st
 # Importujemy nasze nowe pod-moduły
-from views.admin_modules import dashboard, access_control, people_db, dictionaries
+from views.admin_modules import dashboard, access_control, people_db, dictionaries, alerts_config
 
 def render_admin():
     role = st.session_state.user_role
@@ -33,7 +33,14 @@ def render_admin():
 
     # 3. Router Admina
     mode = st.session_state.admin_mode
-    
+    # --- PRZYCISK POWROTU DO PULPITU ADMINA ---
+    # Jeśli jesteśmy w jakimkolwiek pod-module (nie dashboard), pokaż przycisk powrotu
+    if mode != "dashboard":
+        if st.button("⬅️ Wróć do Pulpitu Admina"):
+            st.session_state.admin_mode = "dashboard"
+            st.rerun()
+        st.write("") # Odstęp
+    # --------------------------------------------------
     if mode == "dashboard":
         dashboard.render_dashboard()
         
@@ -49,6 +56,9 @@ def render_admin():
         
     elif mode == "dictionaries":
         dictionaries.render_dictionaries()
+
+    elif mode == "alerts":
+        alerts_config.render_alerts_config()
         
     else:
         st.warning(f"Nieznany tryb admina: {mode}")

@@ -417,3 +417,125 @@ def finalizuj_reset_hasla(email, podany_kod, nowe_haslo):
         return True, "Hasło zostało zmienione."
     else:
         return False, "Błąd zapisu hasła."
+# ==========================
+# 8. POWIADOMIENIA I KONFIGURACJA
+# ==========================
+from datetime import datetime, date
+
+def pobierz_konfiguracje_alertow():
+    """Pobiera wszystkie reguły alertów do edycji w panelu Admina"""
+    conn = create_connection()
+    try:
+        return pd.read_sql_query("SELECT * FROM KONFIGURACJA_ALERTY", conn)
+    finally:
+        conn.close()
+
+def zapisz_konfiguracje_alertow(df_edited):
+    """Zapisuje zmienione reguły z panelu Admina"""
+    conn = create_connection()
+    c = conn.cursor()
+    try:
+        # Iterujemy po dataframe i aktualizujemy rekordy
+        for index, row in df_edited.iterrows():
+            c.execute("""
+                UPDATE KONFIGURACJA_ALERTY 
+                SET Etykieta = ?, DniWaznosci = ?, CzyAktywny = ?
+                WHERE KodPola = ?
+            """, (row['Etykieta'], row['DniWaznosci'], row['CzyAktywny'], row['KodPola']))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Błąd zapisu configu: {e}")
+        return False
+    finally:
+        conn.close()
+
+def pobierz_alerty_medyczne():
+    """
+    Dynamiczna wersja skanera alertów.
+    Pobiera reguły z bazy i sprawdza tylko aktywne pola.
+    """
+    conn = create_connection()
+    
+    # 1. Pobieramy konfigurację (tylko aktywne reguły)
+    try:
+        reguly = pd.read_sql_query("SELECT * FROM KONFIGURACJA_ALERTY WHERE CzyAktywny = 1", conn)
+    except:
+        conn.close()
+        return [] # Jeśli tabela nie istnieje (zabezpieczenie)
+
+    if reguly.empty:
+        conn.close()
+        return []
+
+    # 2. Budujemy zapytanie SQL dynamicznie
+    # Pobieramy zawsze podstawowe dane + kolumny zdefiniowane w konfiguracji
+    kolumny_do_sprawdzenia = reguly['KodPola'].tolist()
+    kolumny_sql = ", ".join([f"pm.{k}" for k in kolumny_do_sprawdzenia])
+    
+    query = f"""
+        SELECT z.ID_Zwierze, z.Imie, z.NrChip, {kolumny_sql}
+        FROM ZWIERZE z
+        LEFT JOIN PROFIL_MEDYCZNY pm ON z.ID_Zwierze = pm.ID_Zwierze
+        WHERE z.StatusZwierzecia NOT IN ('Adoptowany', 'Za Tęczowym Mostem')
+    """
+    
+    try:
+        df = pd.read_sql_query(query, conn)
+    except Exception as e:
+        print(f"Błąd zapytania alertów: {e}")
+        conn.close()
+        return []
+    finally:
+        conn.close()
+    
+    alerty = []
+    dzis = date.today()
+    
+    if df.empty:
+        return alerty
+
+    # 3. Pętla sprawdzająca
+    for index, row_zwierze in df.iterrows():
+        
+        # Dla każdego zwierzęcia sprawdzamy każdą aktywną regułę
+        for _, regula in reguly.iterrows():
+            pole = regula['KodPola']       # np. SzczepienieWscieklizna
+            limit_dni = regula['DniWaznosci'] # np. 365
+            etykieta = regula['Etykieta']  # np. Wścieklizna
+            
+            data_zabiegu_raw = row_zwierze[pole]
+            
+            # Logika sprawdzania daty
+            if not data_zabiegu_raw:
+                # Opcjonalnie: Możesz wyłączyć alerty dla pustych pól, jeśli wolisz
+                alerty.append({
+                    "id": row_zwierze['ID_Zwierze'],
+                    "imie": row_zwierze['Imie'],
+                    "chip": row_zwierze['NrChip'],
+                    "typ": "Brak danych",
+                    "komunikat": f"Brak wpisu: {etykieta}"
+                })
+                continue
+            
+            try:
+                # Obsługa formatu daty (czasem pandas zwraca Timestamp, czasem str)
+                if isinstance(data_zabiegu_raw, str):
+                    data_zabiegu = datetime.strptime(data_zabiegu_raw, '%Y-%m-%d').date()
+                else:
+                    data_zabiegu = data_zabiegu_raw.date() # Jeśli to obiekt datetime/timestamp
+                
+                delta = (dzis - data_zabiegu).days
+                
+                if delta > limit_dni:
+                    alerty.append({
+                        "id": row_zwierze['ID_Zwierze'],
+                        "imie": row_zwierze['Imie'],
+                        "chip": row_zwierze['NrChip'],
+                        "typ": "Przeterminowane",
+                        "komunikat": f"{etykieta}: upłynęło {delta} dni (Limit: {limit_dni})"
+                    })
+            except Exception as e:
+                pass # Ignorujemy błędy parsowania dat
+
+    return alerty
