@@ -79,10 +79,11 @@ c.execute('''CREATE TABLE IF NOT EXISTS SYSTEM_USER_APP (
     ID INTEGER PRIMARY KEY AUTOINCREMENT, 
     Imie TEXT, 
     Nazwisko TEXT, 
-    Email TEXT UNIQUE NOT NULL,       -- Email musi być unikalny (używany jako login)
-    PasswordHash TEXT NOT NULL,       -- Przechowujemy TYLKO hash hasła, nigdy czysty tekst (bezpieczeństwo!)
-    Role TEXT DEFAULT 'Wolontariusz', -- Role: Administrator, Pracownik, Wolontariusz, Dom Tymczasowy
-    IsActive INTEGER DEFAULT 1,       -- 1 = Aktywny, 0 = Zablokowany
+    Email TEXT UNIQUE NOT NULL,       
+    PasswordHash TEXT NOT NULL,       
+    Role TEXT DEFAULT 'Wolontariusz', 
+    IsActive INTEGER DEFAULT 1,       
+    ResetToken TEXT DEFAULT NULL,    -- <--- NOWE POLE: Tutaj trafi kod resetujący
     DataUtworzenia DATE DEFAULT CURRENT_DATE
 )''')
 

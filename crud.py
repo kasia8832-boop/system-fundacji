@@ -364,3 +364,56 @@ def usun_wpis_historii(id_historia):
         return False, str(e)
     finally:
         conn.close()
+
+# ==========================
+# 7. RESET HASŁA (NOWE FUNKCJE)
+# ==========================
+
+def inicjuj_reset_hasla(email):
+    """
+    Sprawdza czy email istnieje. Jeśli tak - generuje kod, zapisuje w bazie i zwraca go.
+    """
+    # 1. Sprawdź czy user istnieje
+    check = run_query("SELECT ID FROM SYSTEM_USER_APP WHERE Email = ?", (email,))
+    if check.empty:
+        return False, "Nie znaleziono takiego adresu email."
+    
+    # 2. Wygeneruj kod (6 cyfr)
+    kod = str(random.randint(100000, 999999))
+    
+    # 3. Zapisz kod w bazie (wymaga kolumny ResetToken dodanej w create_db.py)
+    sql = "UPDATE SYSTEM_USER_APP SET ResetToken = ? WHERE Email = ?"
+    if run_command(sql, (kod, email)):
+        return True, kod
+    else:
+        return False, "Błąd bazy danych."
+
+def finalizuj_reset_hasla(email, podany_kod, nowe_haslo):
+    """
+    Sprawdza czy kod pasuje. Jeśli tak - zmienia hasło i czyści token.
+    """
+    # 1. Pobierz zapisany token
+    res = run_query("SELECT ResetToken FROM SYSTEM_USER_APP WHERE Email = ?", (email,))
+    
+    if res.empty:
+        return False, "Błąd użytkownika."
+    
+    zapisany_token = res.iloc[0]['ResetToken']
+    
+    # 2. Walidacja kodu
+    if not zapisany_token:
+        return False, "Brak aktywnego procesu resetu."
+    
+    # Konwersja na str, żeby uniknąć błędów typów
+    if str(zapisany_token).strip() != str(podany_kod).strip():
+        return False, "Nieprawidłowy kod resetujący."
+    
+    # 3. Zmiana hasła
+    nowy_hash = hashuj_haslo(nowe_haslo)
+    
+    # Ustawiamy hasło i CZYŚCIMY token (żeby nie można go użyć drugi raz)
+    sql = "UPDATE SYSTEM_USER_APP SET PasswordHash = ?, ResetToken = NULL WHERE Email = ?"
+    if run_command(sql, (nowy_hash, email)):
+        return True, "Hasło zostało zmienione."
+    else:
+        return False, "Błąd zapisu hasła."
