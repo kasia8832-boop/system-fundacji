@@ -2,13 +2,20 @@
 WIDOK: LOGOWANIE I RESET HASŁA
 ------------------------------
 Obsługuje logowanie oraz dwuetapowy proces odzyskiwania hasła.
-Wersja 2.0: Poprawiono wywołanie funkcji logowania (verify_user).
+Wersja 3.0 (ORM): Dostosowana do nowego verify_user (3 zwracane wartości).
 """
 import streamlit as st
 import time
 import crud
-# Upewnij się, że utworzyłeś folder services i plik email_service.py
-from services import email_service 
+# Upewnij się, że masz plik services/email_service.py (nawet pusty/zaślepkę)
+try:
+    from services import email_service
+except ImportError:
+    # Zabezpieczenie na wypadek braku pliku email_service
+    class email_service:
+        @staticmethod
+        def wyslij_email_resetu(email, kod):
+            return True, f"Kod (SYMULACJA): {kod}"
 
 def render_login():
     # Centrowanie formularza na ekranie
@@ -27,25 +34,28 @@ def render_login():
         if st.session_state.login_mode == "login":
             st.subheader("Zaloguj się")
             with st.form("login_form"):
-                email = st.text_input("Login (Email)", autocomplete="username") 
+                email = st.text_input("Login", autocomplete="username") 
                 passwd = st.text_input("Hasło", type="password", autocomplete="current-password")
                 submitted = st.form_submit_button("Wejdź", type="primary", use_container_width=True)
                 
                 if submitted:
-                    # --- ZMIANA TUTAJ ---
-                    # Nowy CRUD zwraca (role, name) lub (None, None)
-                    role, name = crud.verify_user(email, passwd)
+                    # --- ZMIANA GŁÓWNA ---
+                    # Odbieramy 3 zmienne zamiast 2
+                    role, name, id_osoba = crud.verify_user(email, passwd)
                     
                     if role: # Jeśli rola istnieje, logowanie udane
                         st.session_state.logged_in = True
                         st.session_state.user_name = name
                         st.session_state.user_role = role
-                        st.session_state.user_email = email # lub login
+                        st.session_state.user_email = email
+                        # Zapisujemy ID_Osoba - kluczowe dla Domów Tymczasowych
+                        st.session_state.user_id_osoba = id_osoba 
+                        
                         st.success(f"Witaj {name}!")
                         time.sleep(0.5)
                         st.rerun()
                     else: 
-                        st.error("Błędny email lub hasło.")
+                        st.error("Błędny login lub hasło.")
                     # --------------------
 
             st.write("")
@@ -58,9 +68,9 @@ def render_login():
         # ======================================================
         elif st.session_state.login_mode == "forgot_request":
             st.subheader("Reset hasła (Krok 1/2)")
-            st.info("Podaj login/email. Wygenerujemy kod weryfikacyjny.")
+            st.info("Podaj login. Wygenerujemy kod weryfikacyjny.")
             
-            email_reset = st.text_input("Twój Login/Email")
+            email_reset = st.text_input("Twój Login")
             
             c_b1, c_b2 = st.columns(2)
             with c_b1:
@@ -69,25 +79,26 @@ def render_login():
                     st.rerun()
             with c_b2:
                 if st.button("Wyślij kod 📩", type="primary"):
-                    # 1. Generujemy kod w bazie (Funkcja przywrócona w CRUD)
-                    ok, wynik = crud.inicjuj_reset_hasla(email_reset)
-                    
-                    if ok:
-                        # 2. Symulujemy wysyłkę maila
-                        # wynik to kod (np. 123456)
-                        sent_ok, msg = email_service.wyslij_email_resetu(email_reset, wynik)
+                    # UWAGA: W nowym crud.py (ORM) musimy jeszcze dodać tę funkcję!
+                    # Na razie zadziała tylko logowanie, reset wywali błąd, 
+                    # dopóki nie dodamy inicjuj_reset_hasla w crud.py
+                    try:
+                        ok, wynik = crud.inicjuj_reset_hasla(email_reset)
                         
-                        if sent_ok:
-                            st.session_state.reset_email = email_reset
-                            st.session_state.login_mode = "forgot_verify"
-                            # Wyświetlamy kod w zielonym pasku (dla testów, bo nie ma SMTP)
-                            st.success(msg) 
-                            time.sleep(2)
-                            st.rerun()
+                        if ok:
+                            sent_ok, msg = email_service.wyslij_email_resetu(email_reset, wynik)
+                            if sent_ok:
+                                st.session_state.reset_email = email_reset
+                                st.session_state.login_mode = "forgot_verify"
+                                st.success(msg) 
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.error(msg)
                         else:
-                            st.error(msg)
-                    else:
-                        st.error(wynik) # np. Nie ma takiego usera
+                            st.error(wynik)
+                    except AttributeError:
+                        st.error("Funkcja resetu hasła jest w trakcie migracji na nowy system bazy danych.")
 
         # ======================================================
         # TRYB 3: RESET - KROK 2 (WPISZ KOD I NOWE HASŁO)
@@ -97,7 +108,7 @@ def render_login():
             st.info(f"Wpisz kod dla: **{st.session_state.get('reset_email', '')}**")
             
             with st.form("reset_final"):
-                kod = st.text_input("Kod weryfikacyjny (6 cyfr)")
+                kod = st.text_input("Kod weryfikacyjny")
                 new_pass = st.text_input("Nowe hasło", type="password")
                 new_pass2 = st.text_input("Powtórz nowe hasło", type="password")
                 
@@ -107,18 +118,20 @@ def render_login():
                     elif len(new_pass) < 4:
                         st.error("Hasło jest za krótkie (min. 4 znaki).")
                     else:
-                        # Finalizacja w bazie (Funkcja przywrócona w CRUD)
-                        email_u = st.session_state.get('reset_email')
-                        ok, msg = crud.finalizuj_reset_hasla(email_u, kod, new_pass)
-                        
-                        if ok:
-                            st.balloons()
-                            st.success("Hasło zmienione pomyślnie! Możesz się teraz zalogować.")
-                            time.sleep(3)
-                            st.session_state.login_mode = "login"
-                            st.rerun()
-                        else:
-                            st.error(msg)
+                        try:
+                            email_u = st.session_state.get('reset_email')
+                            ok, msg = crud.finalizuj_reset_hasla(email_u, kod, new_pass)
+                            
+                            if ok:
+                                st.balloons()
+                                st.success("Hasło zmienione pomyślnie!")
+                                time.sleep(3)
+                                st.session_state.login_mode = "login"
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                        except AttributeError:
+                             st.error("Błąd migracji bazy danych.")
             
             if st.button("Anuluj"):
                 st.session_state.login_mode = "login"

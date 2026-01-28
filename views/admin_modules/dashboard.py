@@ -1,8 +1,7 @@
 """
 MODUŁ ADMINA: DASHBOARD (PULPIT)
 --------------------------------
-Strona startowa panelu administracyjnego.
-Wyświetla kafelki/przyciski nawigacyjne w układzie 2x2.
+Wersja 2.0: Poprawiono nazwę roli na 'Admin'.
 """
 import streamlit as st
 
@@ -19,8 +18,8 @@ def render_dashboard():
             st.subheader("🔐 Dostęp i Konta")
             st.caption("Zarządzanie użytkownikami systemu i hasłami.")
             
-            # Logika uprawnień dla Admina
-            if role == "Administrator":
+            # --- POPRAWKA: Admin zamiast Administrator ---
+            if role == "Admin":
                 if st.button("Zarządzaj Dostępem ➡️", use_container_width=True): 
                     st.session_state.admin_mode = "access"
                     st.rerun()
@@ -50,11 +49,9 @@ def render_dashboard():
 
     with c4:
         with st.container(border=True):
-            # --- TO JEST NOWY KAFELEK ---
             st.subheader("🔔 Powiadomienia")
             st.caption("Konfiguracja terminów szczepień i alertów.")
             
-            # Ten przycisk przenosi do nowego ekranu alerts_config
             if st.button("Konfiguruj Alerty ➡️", use_container_width=True): 
                 st.session_state.admin_mode = "alerts"
                 st.rerun()

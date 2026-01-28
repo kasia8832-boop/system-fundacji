@@ -1,596 +1,595 @@
+# crud.py
 """
-MODUŁ: CRUD (Create, Read, Update, Delete)
-------------------------------------------
-Warstwa dostępu do danych (Data Access Layer).
-Wersja FINALNA: Obsługuje v2.0 bazy, w tym:
-- Nową tabelę UZYTKOWNIK
-- Reset hasła (Token)
-- Adopcję tekstową (String)
-- Zdjęcia (BLOB)
-- Alerty medyczne (Kleszcze)
+MODUŁ: CRUD (Create, Read, Update, Delete) - Wersja ORM (SQLAlchemy)
+--------------------------------------------------------------------
+Odpowiada za logikę biznesową i komunikację z bazą danych.
+Teraz korzysta z klas zdefiniowanych w models.py, zamiast surowego SQL.
 """
-import sqlite3
 import pandas as pd
-from datetime import datetime, date
 import hashlib
-import os
-import random  # Niezbędne do generowania kodu resetu
+from datetime import date, datetime
+from sqlalchemy import text
+from database import SessionLocal
+from models import (
+    Uzytkownik, Osoba, Zwierze, HistoriaZdarzen, Zalacznik,
+    SlownikGatunek, SlownikStatus, SlownikKategoria, KonfiguracjaAlerty
+)
 
-# --- KONFIGURACJA BAZY DANYCH ---
-DB_FILE = "fundacja.db"
+# ==============================================================================
+# 🔧 NARZĘDZIA POMOCNICZE
+# ==============================================================================
 
-def create_connection():
-    """Tworzy połączenie do bazy SQLite."""
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_FILE)
-    except Exception as e:
-        print(f"Błąd połączenia z bazą: {e}")
-    return conn
+def get_db_session():
+    """Tworzy nową sesję do bazy danych."""
+    return SessionLocal()
 
-# ==========================
-# 1. UŻYTKOWNICY (LOGIN & DOSTĘP)
-# ==========================
-def verify_user(login_input, password):
-    """
-    Logowanie oparte na nowej tabeli UZYTKOWNIK.
-    login_input = LoginName.
-    """
-    conn = create_connection()
-    c = conn.cursor()
-    
-    # Pobieramy dane użytkownika
-    c.execute("SELECT HasloHash, Rola, ID_User, LoginName FROM UZYTKOWNIK WHERE LoginName = ? AND CzyAktywny = 1", (login_input,))
-    result = c.fetchone()
-    conn.close()
-    
-    if result:
-        stored_hash = result[0]
-        role = result[1]
-        user_name = result[3]
-        
-        # Weryfikacja hasła (PBKDF2 SHA256)
-        input_hash = hashlib.pbkdf2_hmac(
-            'sha256', 
-            password.encode('utf-8'), 
-            b'salt_fundacja', 
-            100000
-        ).hex()
-        
-        if stored_hash == input_hash:
-            return role, user_name
-            
-    return None, None
-
-def create_user(login_name, email, password, role):
-    """Rejestracja nowego użytkownika systemowego."""
-    conn = create_connection()
-    c = conn.cursor()
-    
-    password_hash = hashlib.pbkdf2_hmac(
+def hash_password(password: str) -> str:
+    """Szyfrowanie hasła (SHA256 + Salt)."""
+    return hashlib.pbkdf2_hmac(
         'sha256', 
         password.encode('utf-8'), 
         b'salt_fundacja', 
         100000
     ).hex()
-    
+
+# ==============================================================================
+# 👤 1. UŻYTKOWNICY I LOGOWANIE
+# ==============================================================================
+
+def verify_user(login_input, password_input):
+    """
+    Weryfikuje logowanie.
+    Zwraca: (Rola, LoginName, IDOsoba) lub (None, None, None)
+    """
+    db = get_db_session()
     try:
-        c.execute("""
-            INSERT INTO UZYTKOWNIK (LoginName, Email, HasloHash, Rola, CzyAktywny)
-            VALUES (?, ?, ?, ?, 1)
-        """, (login_name, email, password_hash, role))
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False # Login zajęty
+        # Szukamy użytkownika po loginie
+        user = db.query(Uzytkownik).filter(Uzytkownik.LoginName == login_input, Uzytkownik.CzyAktywny == True).first()
+        
+        if user:
+            input_hash = hash_password(password_input)
+            if user.HasloHash == input_hash:
+                # Zwracamy IDOsoba, aby wiedzieć kim fizycznie jest ten user (np. dla DT)
+                return user.Rola, user.LoginName, user.IDOsoba
+                
+        return None, None, None
     finally:
-        conn.close()
+        db.close() # Zawsze zamykamy sesję!
 
-def change_user_password(login_name, new_password):
-    """Zmiana hasła (np. przez Admina)."""
-    conn = create_connection()
-    c = conn.cursor()
-    
-    new_hash = hashlib.pbkdf2_hmac(
-        'sha256', 
-        new_password.encode('utf-8'), 
-        b'salt_fundacja', 
-        100000
-    ).hex()
-    
-    c.execute("UPDATE UZYTKOWNIK SET HasloHash = ? WHERE LoginName = ?", (new_hash, login_name))
-    conn.commit()
-    conn.close()
-    return True
-
-# ==========================
-# 2. ZWIERZĘTA (REJESTR)
-# ==========================
-def add_animal(imie, gatunek, plec, status):
-    """Dodaje zwierzę. DataPrzyjecia ustawiana automatycznie na dzisiaj."""
-    conn = create_connection()
-    c = conn.cursor()
-    
-    dzis = date.today().strftime("%Y-%m-%d")
-    
-    c.execute("""
-        INSERT INTO ZWIERZE (Imie, Gatunek, Plec, StatusZwierzecia, DataPrzyjecia)
-        VALUES (?, ?, ?, ?, ?)
-    """, (imie, gatunek, plec, status, dzis))
-    
-    new_id = c.lastrowid
-    
-    # Tworzymy pusty profil medyczny od razu
-    c.execute("INSERT INTO PROFIL_MEDYCZNY (ID_Zwierze) VALUES (?)", (new_id,))
-    
-    conn.commit()
-    conn.close()
-    return new_id
-
-def get_all_animals_df():
-    """Pobiera listę zwierząt do tabeli głównej."""
-    conn = create_connection()
-    df = pd.read_sql_query("SELECT ID_Zwierze, Imie, Gatunek, Rasa, StatusZwierzecia, NrChip, DataPrzyjecia FROM ZWIERZE", conn)
-    conn.close()
-    return df
-
-def get_animal_details(id_zwierze):
-    conn = create_connection()
-    # SELECT * pobierze też nowe kolumny DaneAdoptujacego i DataAdopcji
-    df = pd.read_sql_query("SELECT * FROM ZWIERZE WHERE ID_Zwierze = ?", conn, params=(id_zwierze,))
-    conn.close()
-    return df.iloc[0] if not df.empty else None
-
-def update_animal_basic(id_zwierze, imie, gatunek, rasa, plec, data_ur, wiek_opis, status, chip, opis, data_przyjecia):
-    """Aktualizacja danych podstawowych."""
-    conn = create_connection()
-    c = conn.cursor()
-    c.execute("""
-        UPDATE ZWIERZE 
-        SET Imie=?, Gatunek=?, Rasa=?, Plec=?, DataUrodzenia=?, WiekOpisowy=?, StatusZwierzecia=?, NrChip=?, Opis=?, DataPrzyjecia=?
-        WHERE ID_Zwierze=?
-    """, (imie, gatunek, rasa, plec, data_ur, wiek_opis, status, chip, opis, data_przyjecia, id_zwierze))
-    conn.commit()
-    conn.close()
-
-def update_animal_photo(id_zwierze, photo_bytes):
-    """Aktualizacja zdjęcia (BLOB)."""
-    conn = create_connection()
-    c = conn.cursor()
-    c.execute("UPDATE ZWIERZE SET Zdjecie=? WHERE ID_Zwierze=?", (photo_bytes, id_zwierze))
-    conn.commit()
-    conn.close()
-
-def adoptuj_zwierze(id_zwierze, dane_osoby, data_adopcji):
-    """
-    Finalizuje adopcję: 
-    1. Zmienia status na 'Adoptowany'
-    2. Zapisuje dane osoby (string) i datę.
-    """
-    conn = create_connection()
-    c = conn.cursor()
-    
+def create_user(login, email, password, rola, id_osoba=None):
+    """Tworzy nowego użytkownika systemowego."""
+    db = get_db_session()
     try:
-        c.execute("""
-            UPDATE ZWIERZE 
-            SET StatusZwierzecia = 'Adoptowany', 
-                DaneAdoptujacego = ?, 
-                DataAdopcji = ? 
-            WHERE ID_Zwierze = ?
-        """, (dane_osoby, data_adopcji, id_zwierze))
-        conn.commit()
-        return True
+        new_user = Uzytkownik(
+            LoginName=login,
+            Email=email,
+            HasloHash=hash_password(password),
+            Rola=rola,
+            IDOsoba=id_osoba, # Powiązanie z tabelą OSOBA
+            CzyAktywny=True
+        )
+        db.add(new_user)
+        db.commit()
+        return True, "Użytkownik utworzony."
     except Exception as e:
-        print(f"Błąd adopcji: {e}")
-        return False
+        db.rollback() # Cofnij zmiany w razie błędu
+        return False, f"Błąd: {e}"
     finally:
-        conn.close()
+        db.close()
 
-# ==========================
-# 3. PROFIL MEDYCZNY
-# ==========================
-def get_medical_profile(id_zwierze):
-    """Pobiera profil medyczny (w tym nowe pole OchronaKleszczeDo)."""
-    conn = create_connection()
-    df = pd.read_sql_query("SELECT * FROM PROFIL_MEDYCZNY WHERE ID_Zwierze = ?", conn, params=(id_zwierze,))
-    conn.close()
-    return df.iloc[0] if not df.empty else None
+# ==============================================================================
+# 🐾 2. ZWIERZĘTA (LISTING I SZCZEGÓŁY)
+# ==============================================================================
 
-def update_medical_profile(id_zwierze, wscieklizna, zakazne, odrobaczenie, kastracja, kleszcze_do, opis):
-    """Aktualizacja medyczna."""
-    conn = create_connection()
-    c = conn.cursor()
-    c.execute("""
-        UPDATE PROFIL_MEDYCZNY 
-        SET SzczepienieWscieklizna=?, SzczepienieZakazne=?, Odrobaczenie=?, DataKastracji=?, OchronaKleszczeDo=?, OpisZdrowia=?
-        WHERE ID_Zwierze=?
-    """, (wscieklizna, zakazne, odrobaczenie, kastracja, kleszcze_do, opis, id_zwierze))
-    conn.commit()
-    conn.close()
-
-def add_medical_event(id_zwierze, data, typ, opis):
-    conn = create_connection()
-    c = conn.cursor()
-    c.execute("INSERT INTO HISTORIA_MEDYCZNA (ID_Zwierze, DataZdarzenia, TypZdarzenia, Opis) VALUES (?, ?, ?, ?)",
-              (id_zwierze, data, typ, opis))
-    conn.commit()
-    conn.close()
-
-def get_medical_history(id_zwierze):
-    conn = create_connection()
-    df = pd.read_sql_query("SELECT * FROM HISTORIA_MEDYCZNA WHERE ID_Zwierze=? ORDER BY DataZdarzenia DESC", conn, params=(id_zwierze,))
-    conn.close()
-    return df
-
-# ==========================
-# 4. SŁOWNIKI
-# ==========================
-def get_dictionary(table_name):
-    conn = create_connection()
-    try:
-        df = pd.read_sql_query(f"SELECT Wartosc FROM {table_name} ORDER BY Wartosc", conn)
-        return df['Wartosc'].tolist()
-    except:
-        return []
-    finally:
-        conn.close()
-
-def add_dict_value(table_name, value):
-    conn = create_connection()
-    c = conn.cursor()
-    try:
-        c.execute(f"INSERT INTO {table_name} (Wartosc) VALUES (?)", (value,))
-        conn.commit()
-    except:
-        pass
-    finally:
-        conn.close()
-
-def delete_dict_value(table_name, value):
-    conn = create_connection()
-    c = conn.cursor()
-    c.execute(f"DELETE FROM {table_name} WHERE Wartosc=?", (value,))
-    conn.commit()
-    conn.close()
-
-# ==========================
-# 5. OSOBY I ADMIN
-# ==========================
-def get_all_users():
-    """Pobiera listę użytkowników systemowych."""
-    conn = create_connection()
-    df = pd.read_sql_query("SELECT ID_User, LoginName, Email, Rola, CzyAktywny FROM UZYTKOWNIK", conn)
-    conn.close()
-    return df
-
-def toggle_user_status(id_user, current_status):
-    conn = create_connection()
-    c = conn.cursor()
-    new_status = 0 if current_status == 1 else 1
-    c.execute("UPDATE UZYTKOWNIK SET CzyAktywny = ? WHERE ID_User = ?", (new_status, id_user))
-    conn.commit()
-    conn.close()
-
-def delete_user(id_user):
-    conn = create_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM UZYTKOWNIK WHERE ID_User = ?", (id_user,))
-    conn.commit()
-    conn.close()
-
-def get_all_people():
-    conn = create_connection()
-    df = pd.read_sql_query("SELECT ID_Osoba, Imie, Nazwisko, Rola, Telefon, Email, Miasto, DataRejestracji FROM OSOBA", conn)
-    conn.close()
-    return df
-
-def add_person(imie, nazwisko, rola, telefon, email, miasto):
-    conn = create_connection()
-    c = conn.cursor()
-    dzis = date.today().strftime("%Y-%m-%d")
-    c.execute("""
-        INSERT INTO OSOBA (Imie, Nazwisko, Rola, Telefon, Email, Miasto, DataRejestracji)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (imie, nazwisko, rola, telefon, email, miasto, dzis))
-    conn.commit()
-    conn.close()
-
-def delete_person(id_osoba):
-    conn = create_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM OSOBA WHERE ID_Osoba = ?", (id_osoba,))
-    conn.commit()
-    conn.close()
-
-# ==========================
-# 6. RESET HASŁA (NAPRAWIONE)
-# ==========================
-def inicjuj_reset_hasla(email_login):
+def pobierz_liste_zwierzat(id_opiekun_dt=None):
     """
-    Generuje kod i zapisuje go w bazie (kolumna ResetToken).
+    Pobiera DataFrame do kafelków na stronie głównej (Listing).
+    Filtracja:
+    - Jeśli id_opiekun_dt jest podane -> pokazuje tylko zwierzęta przypisane do tego DT.
+    - Ukrywa zwierzęta 'Za Tęczowym Mostem'.
     """
-    conn = create_connection()
-    c = conn.cursor()
-    
-    # Sprawdź czy user istnieje
-    c.execute("SELECT ID_User FROM UZYTKOWNIK WHERE LoginName = ?", (email_login,))
-    user = c.fetchone()
-    
-    if not user:
-        conn.close()
-        return False, "Nie znaleziono użytkownika o takim loginie."
-    
-    # Generuj kod
-    kod = str(random.randint(100000, 999999))
-    
+    db = get_db_session()
     try:
-        # UWAGA: Upewnij się, że masz kolumnę ResetToken w bazie!
-        # Jeśli nie, puść skrypt add_reset_token.py
-        c.execute("UPDATE UZYTKOWNIK SET ResetToken = ? WHERE LoginName = ?", (kod, email_login))
-        conn.commit()
-        conn.close()
-        return True, kod
+        # Budujemy zapytanie (Query)
+        q = db.query(
+            Zwierze.IDZwierze, 
+            Zwierze.Imie, 
+            Zwierze.Rasa, 
+            Zwierze.StatusZwierzecia, 
+            Zwierze.Zdjecie,
+            Zwierze.IDOpiekun # Potrzebne do weryfikacji
+        ).filter(Zwierze.StatusZwierzecia != 'Za Tęczowym Mostem')
+
+        # Jeśli to DT, dodajemy filtr WHERE IDOpiekun = ...
+        if id_opiekun_dt:
+            q = q.filter(Zwierze.IDOpiekun == id_opiekun_dt)
+
+        # Pobieramy dane do Pandas DataFrame
+        # statement to skompilowany SQL, db.bind to połączenie
+        df = pd.read_sql(q.statement, db.bind)
+        return df
     except Exception as e:
-        conn.close()
-        return False, f"Błąd bazy: {e}"
-
-def finalizuj_reset_hasla(email_login, kod_uzytkownika, nowe_haslo):
-    """
-    Weryfikuje kod i zmienia hasło.
-    """
-    conn = create_connection()
-    c = conn.cursor()
-    
-    c.execute("SELECT ResetToken FROM UZYTKOWNIK WHERE LoginName = ?", (email_login,))
-    row = c.fetchone()
-    
-    if not row or row[0] != kod_uzytkownika:
-        conn.close()
-        return False, "Nieprawidłowy kod weryfikacyjny."
-    
-    # Kod poprawny - haszujemy i zmieniamy
-    new_hash = hashlib.pbkdf2_hmac(
-        'sha256', 
-        nowe_haslo.encode('utf-8'), 
-        b'salt_fundacja', 
-        100000
-    ).hex()
-
-    try:
-        c.execute("""
-            UPDATE UZYTKOWNIK 
-            SET HasloHash = ?, ResetToken = NULL 
-            WHERE LoginName = ?
-        """, (new_hash, email_login))
-        conn.commit()
-        return True, "Hasło zmienione."
-    except Exception as e:
-        return False, str(e)
-    finally:
-        conn.close()
-
-# ==========================
-# 7. POWIADOMIENIA (ALERTY)
-# ==========================
-def pobierz_konfiguracje_alertow():
-    conn = create_connection()
-    try:
-        return pd.read_sql_query("SELECT * FROM KONFIGURACJA_ALERTY", conn)
-    except Exception:
+        print(f"Błąd listingu: {e}")
         return pd.DataFrame()
     finally:
-        conn.close()
+        db.close()
 
-def zapisz_konfiguracje_alertow(df_edited):
-    conn = create_connection()
-    c = conn.cursor()
+def pobierz_szczegoly_zwierzecia(id_zwierze):
+    """Pobiera pełny obiekt zwierzęcia (wraz z polami medycznymi)."""
+    db = get_db_session()
     try:
-        for index, row in df_edited.iterrows():
-            c.execute("""
-                UPDATE KONFIGURACJA_ALERTY 
-                SET Etykieta = ?, DniWaznosci = ?, CzyAktywny = ?
-                WHERE KodPola = ?
-            """, (row['Etykieta'], row['DniWaznosci'], row['CzyAktywny'], row['KodPola']))
-        conn.commit()
+        zwierze = db.query(Zwierze).filter(Zwierze.IDZwierze == id_zwierze).first()
+        return zwierze
+    finally:
+        db.close()
+
+def dodaj_nowe_zwierze(imie, gatunek, plec, status, id_nadzorca=None):
+    """Rejestruje nowe zwierzę."""
+    db = get_db_session()
+    try:
+        nowe = Zwierze(
+            Imie=imie,
+            Gatunek=gatunek,
+            Plec=plec,
+            StatusZwierzecia=status,
+            IDNadzor=id_nadzorca, # Kto wprowadza/opiekuje się z ramienia fundacji
+            DataPrzyjecia=date.today()
+        )
+        db.add(nowe)
+        db.commit()
+        return nowe.IDZwierze
+    except Exception as e:
+        db.rollback()
+        print(e)
+        return None
+    finally:
+        db.close()
+
+# ==============================================================================
+# ✏️ 3. EDYCJA DANYCH (ZWIERZĘ + MEDYCZNE)
+# ==============================================================================
+
+def aktualizuj_dane_podstawowe(id_zwierze, dane_dict):
+    """
+    Aktualizuje podstawowe pola (Imie, Rasa, Chip itp.)
+    dane_dict: słownik {NazwaPolaModelu: Wartość}
+    """
+    db = get_db_session()
+    try:
+        # Pobieramy obiekt do edycji
+        zwierze = db.query(Zwierze).filter(Zwierze.IDZwierze == id_zwierze).first()
+        if not zwierze:
+            return False
+
+        # Aktualizujemy pola dynamicznie
+        for key, value in dane_dict.items():
+            if hasattr(zwierze, key): # Sprawdź czy pole istnieje w modelu
+                setattr(zwierze, key, value)
+        
+        db.commit()
         return True
     except Exception as e:
-        print(f"Błąd zapisu configu: {e}")
+        db.rollback()
+        print(f"Błąd update: {e}")
         return False
     finally:
-        conn.close()
+        db.close()
+
+def aktualizuj_zdjecie(id_zwierze, bytes_data):
+    """Zapisuje BLOB zdjęcia."""
+    db = get_db_session()
+    try:
+        db.query(Zwierze).filter(Zwierze.IDZwierze == id_zwierze).update({Zwierze.Zdjecie: bytes_data})
+        db.commit()
+    finally:
+        db.close()
+
+def adoptuj_zwierze(id_zwierze, id_nowy_wlasciciel):
+    """
+    Finalizacja adopcji:
+    1. Zmienia status na 'Adoptowany'.
+    2. Przypisuje IDOpiekun = id_nowy_wlasciciel.
+    """
+    db = get_db_session()
+    try:
+        zwierze = db.query(Zwierze).filter(Zwierze.IDZwierze == id_zwierze).first()
+        if zwierze:
+            zwierze.StatusZwierzecia = 'Adoptowany'
+            zwierze.IDOpiekun = id_nowy_wlasciciel
+            # zwierze.DataAdopcji - usunęliśmy to pole z bazy, historia załatwi sprawę daty
+            db.commit()
+            return True
+        return False
+    except Exception as e:
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+# ==============================================================================
+# 🏥 4. MEDYCYNA I HISTORIA
+# ==============================================================================
+
+def dodaj_wpis_historii(id_zwierze, id_user, kategoria, opis):
+    """
+    Dodaje zdarzenie do historii.
+    WAŻNE: id_user to ID zalogowanego UZYTKOWNIKA, nie Osoby.
+    """
+    db = get_db_session()
+    try:
+        wpis = HistoriaZdarzen(
+            IDZwierze=id_zwierze,
+            IDUser=id_user,
+            Kategoria=kategoria,
+            Opis=opis,
+            DataZdarzenia=date.today()
+        )
+        db.add(wpis)
+        db.commit()
+        return wpis.IDHistoria
+    except Exception as e:
+        db.rollback()
+        return None
+    finally:
+        db.close()
+
+def pobierz_historie(id_zwierze):
+    """Pobiera historię jako DataFrame (do wyświetlenia tabeli)."""
+    db = get_db_session()
+    try:
+        # Łączymy (JOIN) z tabelą Uzytkownik, żeby pobrać Login autora wpisu
+        # POPRAWKA: Dodano HistoriaZdarzen.IDHistoria do zapytania!
+        q = db.query(
+            HistoriaZdarzen.IDHistoria,      # <--- TO BYŁO KLUCZOWE
+            HistoriaZdarzen.DataZdarzenia,
+            HistoriaZdarzen.Kategoria,
+            HistoriaZdarzen.Opis,
+            Uzytkownik.LoginName.label("Autor")
+        ).join(Uzytkownik, HistoriaZdarzen.IDUser == Uzytkownik.IDUser)\
+         .filter(HistoriaZdarzen.IDZwierze == id_zwierze)\
+         .order_by(HistoriaZdarzen.DataZdarzenia.desc())
+        
+        df = pd.read_sql(q.statement, db.bind)
+        return df
+    finally:
+        db.close()
+
+# ==============================================================================
+# 👥 5. OSOBY (Słownik Ludzi)
+# ==============================================================================
+
+def pobierz_wszystkie_osoby():
+    """Zwraca DataFrame wszystkich osób (do selectboxów)."""
+    db = get_db_session()
+    try:
+        q = db.query(Osoba.IDOsoba, Osoba.Imie, Osoba.Nazwisko, Osoba.AdresMiasto)
+        df = pd.read_sql(q.statement, db.bind)
+        # Tworzymy kolumnę pomocniczą do wyświetlania w SelectBox (np. "Jan Kowalski (Warszawa)")
+        if not df.empty:
+            df['Display'] = df['Imie'] + " " + df['Nazwisko'] + " (" + df['AdresMiasto'].fillna('-') + ")"
+        return df
+    finally:
+        db.close()
+
+def dodaj_osobe(imie, nazwisko, telefon, email, miasto, ulica, lokal, kod):
+    db = get_db_session()
+    try:
+        osoba = Osoba(
+            Imie=imie, Nazwisko=nazwisko, Telefon=telefon, Email=email,
+            AdresMiasto=miasto, AdresUlica=ulica, AdresNrLokalu=lokal, AdresKodPocztowy=kod
+        )
+        db.add(osoba)
+        db.commit()
+        return True, "Osoba dodana"
+    except Exception as e:
+        db.rollback()
+        return False, str(e)
+    finally:
+        db.close()
+
+# ==============================================================================
+# 📚 6. SŁOWNIKI
+# ==============================================================================
+
+def pobierz_slownik(nazwa_modelu):
+    """
+    Pobiera wartości ze słownika.
+    nazwa_modelu: np. 'gatunek', 'status'
+    """
+    db = get_db_session()
+    model_map = {
+        'gatunek': SlownikGatunek,
+        'status': SlownikStatus,
+        'kategoria': SlownikKategoria
+    }
+    
+    try:
+        model = model_map.get(nazwa_modelu)
+        if not model: return []
+        
+        wyniki = db.query(model.Wartosc).all()
+        return [w[0] for w in wyniki] # Spłaszczamy listę krotek do listy stringów
+    finally:
+        db.close()
+# ==============================================================================
+# 🚨 7. POWIADOMIENIA I ALERTY (DODANE)
+# ==============================================================================
 
 def pobierz_alerty_medyczne():
     """
-    Skaner alertów uwzględniający nowe pole OchronaKleszczeDo.
+    Skanuje bazę w poszukiwaniu przeterminowanych szczepień i badań.
+    Zwraca listę słowników z alertami.
     """
-    conn = create_connection()
-    
-    # 1. Pobieramy konfigurację
-    try:
-        reguly = pd.read_sql_query("SELECT * FROM KONFIGURACJA_ALERTY WHERE CzyAktywny = 1", conn)
-    except:
-        conn.close()
-        return []
-
-    if reguly.empty:
-        conn.close()
-        return []
-
-    # 2. Budujemy zapytanie SQL dynamicznie
-    kolumny_do_sprawdzenia = reguly['KodPola'].tolist()
-    kolumny_sql = ", ".join([f"pm.{k}" for k in kolumny_do_sprawdzenia])
-    
-    query = f"""
-        SELECT z.ID_Zwierze, z.Imie, z.NrChip, {kolumny_sql}
-        FROM ZWIERZE z
-        LEFT JOIN PROFIL_MEDYCZNY pm ON z.ID_Zwierze = pm.ID_Zwierze
-        WHERE z.StatusZwierzecia NOT IN ('Adoptowany', 'Za Tęczowym Mostem')
-    """
-    
-    try:
-        df = pd.read_sql_query(query, conn)
-    except Exception as e:
-        print(f"Błąd zapytania alertów: {e}")
-        conn.close()
-        return []
-    finally:
-        conn.close()
-    
+    db = get_db_session()
     alerty = []
     dzis = date.today()
     
-    if df.empty:
+    try:
+        # 1. Pobieramy aktywne reguły alertów
+        reguly = db.query(KonfiguracjaAlerty).filter(KonfiguracjaAlerty.CzyAktywny == True).all()
+        if not reguly:
+            return []
+
+        # 2. Pobieramy zwierzęta (tylko te, które są pod opieką fundacji)
+        # Wykluczamy adoptowane i nieżyjące
+        zwierzeta = db.query(Zwierze).filter(
+            Zwierze.StatusZwierzecia.notin_(['Adoptowany', 'Za Tęczowym Mostem'])
+        ).all()
+
+        # 3. Pętla sprawdzająca
+        for zwierzak in zwierzeta:
+            for regula in reguly:
+                pole = regula.KodPola      # np. "SzczepienieWscieklizna"
+                limit_dni = regula.DniWaznosci
+                etykieta = regula.Etykieta
+                
+                # Pobieramy wartość pola dynamicznie z obiektu Zwierze
+                # getattr(obiekt, "NazwaPola") to to samo co obiekt.NazwaPola
+                data_baza = getattr(zwierzak, pole, None)
+                
+                if not data_baza:
+                    continue # Brak daty wpisanej = brak weryfikacji (lub można dodać alert "Brak danych")
+
+                # --- A. LOGIKA DLA OCHRONY PRZECIW KLESZCZOM (Data "Ważne do") ---
+                if pole == 'OchronaKleszczeDo':
+                    # Tutaj data w bazie to data WYGAŚNIĘCIA, a nie zabiegu
+                    dni_po_terminie = (dzis - data_baza).days
+                    
+                    if dni_po_terminie > 0: # Jeśli dzis jest po dacie wygaśnięcia
+                        alerty.append({
+                            "id": zwierzak.IDZwierze,
+                            "imie": zwierzak.Imie,
+                            "chip": zwierzak.NrChip,
+                            "typ": "Wygasła Ochrona",
+                            "komunikat": f"{etykieta}: wygasła {data_baza} ({dni_po_terminie} dni temu)"
+                        })
+
+                # --- B. LOGIKA DLA SZCZEPIEŃ (Data zabiegu + Okres ważności) ---
+                else:
+                    # Tutaj data w bazie to data ZABIEGU. Dodajemy do niej dni ważności.
+                    dni_od_zabiegu = (dzis - data_baza).days
+                    
+                    if dni_od_zabiegu > limit_dni:
+                        alerty.append({
+                            "id": zwierzak.IDZwierze,
+                            "imie": zwierzak.Imie,
+                            "chip": zwierzak.NrChip,
+                            "typ": "Przeterminowane",
+                            "komunikat": f"{etykieta}: minęło {dni_od_zabiegu} dni (Limit: {limit_dni})"
+                        })
+
         return alerty
 
-    # 3. Pętla sprawdzająca
-    for index, row_zwierze in df.iterrows():
-        for _, regula in reguly.iterrows():
-            pole = regula['KodPola']
-            limit_dni = regula['DniWaznosci']
-            etykieta = regula['Etykieta']
-            
-            data_db_raw = row_zwierze.get(pole)
-            
-            if not data_db_raw:
-                continue
-            
-            try:
-                if isinstance(data_db_raw, str):
-                    data_db = datetime.strptime(data_db_raw, '%Y-%m-%d').date()
-                else:
-                    data_db = data_db_raw.date()
-
-                # --- OBSŁUGA DLA KLESZCZY (Data wygaśnięcia) ---
-                if pole == 'OchronaKleszczeDo':
-                    dni_po_terminie = (dzis - data_db).days
-                    if dni_po_terminie > 0:
-                        alerty.append({
-                            "id": row_zwierze['ID_Zwierze'],
-                            "imie": row_zwierze['Imie'],
-                            "chip": row_zwierze['NrChip'],
-                            "typ": "Wygasła Ochrona",
-                            "komunikat": f"{etykieta}: wygasła {data_db} ({dni_po_terminie} dni temu)"
-                        })
-                
-                # --- OBSŁUGA SZCZEPIEŃ (Data zabiegu + Ważność) ---
-                else:
-                    delta = (dzis - data_db).days
-                    if delta > limit_dni:
-                        alerty.append({
-                            "id": row_zwierze['ID_Zwierze'],
-                            "imie": row_zwierze['Imie'],
-                            "chip": row_zwierze['NrChip'],
-                            "typ": "Przeterminowane",
-                            "komunikat": f"{etykieta}: upłynęło {delta} dni (Limit: {limit_dni})"
-                        })
-                        
-            except Exception as e:
-                pass 
-
-    return alerty
-
-# ==========================
-# 8. HISTORIA I ZAŁĄCZNIKI
-# ==========================
-def dodaj_zalacznik(id_historia, plik):
-    conn = create_connection()
-    c = conn.cursor()
-    dane = plik.getvalue()
-    
-    try:
-        c.execute("""
-            INSERT INTO ZALACZNIKI (ID_Historia, NazwaPliku, TypPliku, DaneBLOB, DataDodania)
-            VALUES (?, ?, ?, ?, DATE('now'))
-        """, (id_historia, plik.name, plik.type, dane))
-        conn.commit()
-        return True, "OK"
     except Exception as e:
-        return False, str(e)
+        print(f"Błąd generowania alertów: {e}")
+        return []
     finally:
-        conn.close()
+        db.close()
 
-def pobierz_zalaczniki(id_historia):
-    conn = create_connection()
-    try:
-        df = pd.read_sql_query(f"""
-            SELECT ID_Zalacznik, NazwaPliku, TypPliku, length(DaneBLOB) as RozmiarBajt, DataDodania 
-            FROM ZALACZNIKI 
-            WHERE ID_Historia = {id_historia}
-        """, conn)
-    except:
-        df = pd.DataFrame()
-    finally:
-        conn.close()
-    return df
-
-def pobierz_plik_content(id_zalacznik):
-    conn = create_connection()
-    c = conn.cursor()
-    try:
-        c.execute("SELECT NazwaPliku, DaneBLOB, TypPliku FROM ZALACZNIKI WHERE ID_Zalacznik = ?", (id_zalacznik,))
-        row = c.fetchone()
-    except:
-        row = None
-    finally:
-        conn.close()
-    return row
-
-def usun_zalacznik(id_zalacznik):
-    conn = create_connection()
-    c = conn.cursor()
-    try:
-        c.execute("DELETE FROM ZALACZNIKI WHERE ID_Zalacznik = ?", (id_zalacznik,))
-        conn.commit()
-    except:
-        pass
-    finally:
-        conn.close()
-    
-def dodaj_wpis_historii(id_zwierze, id_autor, data, kategoria, opis):
-    conn = create_connection()
-    c = conn.cursor()
-    new_id = None
-    try:
-        c.execute("""
-            INSERT INTO HISTORIA_ZDARZEN (ID_Zwierze, ID_Osoba, DataZdarzenia, Kategoria, Opis)
-            VALUES (?, ?, ?, ?, ?)
-        """, (id_zwierze, id_autor, data, kategoria, opis))
-        new_id = c.lastrowid
-        conn.commit()
-    except Exception as e:
-        print(f"Błąd dodawania historii: {e}")
-    finally:
-        conn.close()
-    return new_id
-
-def pobierz_historie_zdarzen(id_zwierze):
-    conn = create_connection()
-    query = f"""
-        SELECT h.ID_Historia, h.DataZdarzenia, h.Kategoria, h.Opis, 
-               o.Imie || ' ' || o.Nazwisko as Autor
-        FROM HISTORIA_ZDARZEN h
-        LEFT JOIN OSOBA o ON h.ID_Osoba = o.ID_Osoba
-        WHERE h.ID_Zwierze = {id_zwierze}
-        ORDER BY h.DataZdarzenia DESC
-    """
-    try:
-        df = pd.read_sql_query(query, conn)
-    except:
-        df = pd.DataFrame()
-    finally:
-        conn.close()
-    return df
+# ==============================================================================
+# 📂 8. ZAŁĄCZNIKI I HISTORIA (BRAKUJĄCE FUNKCJE)
+# ==============================================================================
 
 def usun_wpis_historii(id_historia):
-    conn = create_connection()
-    c = conn.cursor()
+    """Usuwa zdarzenie i kaskadowo jego załączniki."""
+    db = get_db_session()
     try:
-        c.execute("DELETE FROM ZALACZNIKI WHERE ID_Historia = ?", (id_historia,))
-        c.execute("DELETE FROM HISTORIA_ZDARZEN WHERE ID_Historia = ?", (id_historia,))
-        conn.commit()
-        return True, "Usunięto pomyślnie"
+        wpis = db.query(HistoriaZdarzen).filter(HistoriaZdarzen.IDHistoria == id_historia).first()
+        if wpis:
+            db.delete(wpis)
+            db.commit()
+            return True, "Usunięto wpis."
+        return False, "Nie znaleziono wpisu."
     except Exception as e:
-        conn.rollback()
+        db.rollback()
         return False, str(e)
     finally:
-        conn.close()
+        db.close()
+
+def pobierz_liste_zalacznikow(id_historia):
+    """
+    Pobiera listę plików BEZ ich zawartości (żeby nie zapchać pamięci).
+    Oblicza rozmiar pliku na podstawie długości BLOBa.
+    """
+    db = get_db_session()
+    try:
+        # SQLAlchmey nie ma prostego func.length dla BLOB w każdym dialekcie,
+        # więc pobierzemy obiekty, ale deferujemy (opóźniamy) pobranie DaneBLOB
+        from sqlalchemy.orm import defer
+        
+        pliki = db.query(Zalacznik).filter(Zalacznik.IDHistoria == id_historia).all()
+        
+        data = []
+        for p in pliki:
+            rozmiar = len(p.DaneBLOB) if p.DaneBLOB else 0
+            data.append({
+                "ID_Zalacznik": p.IDZalacznik,
+                "NazwaPliku": p.NazwaPliku,
+                "TypPliku": p.TypPliku,
+                "RozmiarBajt": rozmiar
+            })
+        return pd.DataFrame(data)
+    finally:
+        db.close()
+
+def pobierz_plik_content(id_zalacznik):
+    """Pobiera pełną zawartość pliku (BLOB) do pobrania."""
+    db = get_db_session()
+    try:
+        plik = db.query(Zalacznik).filter(Zalacznik.IDZalacznik == id_zalacznik).first()
+        if plik:
+            return plik.NazwaPliku, plik.DaneBLOB, plik.TypPliku
+        return None
+    finally:
+        db.close()
+
+def dodaj_zalacznik(id_historia, uploaded_file):
+    """Zapisuje plik w bazie."""
+    db = get_db_session()
+    try:
+        bytes_data = uploaded_file.getvalue()
+        
+        nowy = Zalacznik(
+            IDHistoria=id_historia,
+            NazwaPliku=uploaded_file.name,
+            TypPliku=uploaded_file.type,
+            DaneBLOB=bytes_data
+        )
+        db.add(nowy)
+        db.commit()
+        return True, "Dodano plik"
+    except Exception as e:
+        db.rollback()
+        return False, str(e)
+    finally:
+        db.close()
+
+def usun_zalacznik(id_zalacznik):
+    """Usuwa pojedynczy plik."""
+    db = get_db_session()
+    try:
+        plik = db.query(Zalacznik).filter(Zalacznik.IDZalacznik == id_zalacznik).first()
+        if plik:
+            db.delete(plik)
+            db.commit()
+    finally:
+        db.close()
+
+# ==============================================================================
+# 🛠️ 8. ADMINISTRACJA (DODATKI DO CRUD.PY)
+# ==============================================================================
+
+# --- ZARZĄDZANIE UŻYTKOWNIKAMI ---
+
+def pobierz_wszystkich_uzytkownikow():
+    """Zwraca DataFrame z listą użytkowników systemu."""
+    db = get_db_session()
+    try:
+        # Pobieramy też rolę z tabeli OSOBA jeśli jest powiązanie (opcjonalne)
+        q = db.query(Uzytkownik.IDUser, Uzytkownik.LoginName, Uzytkownik.Email, Uzytkownik.Rola, Uzytkownik.CzyAktywny)
+        df = pd.read_sql(q.statement, db.bind)
+        return df
+    finally:
+        db.close()
+
+def zmien_status_uzytkownika(id_user, obecny_status):
+    """Blokuje lub odblokowuje konto."""
+    db = get_db_session()
+    try:
+        nowy_status = not bool(obecny_status)
+        db.query(Uzytkownik).filter(Uzytkownik.IDUser == id_user).update({Uzytkownik.CzyAktywny: nowy_status})
+        db.commit()
+    finally:
+        db.close()
+
+def zmien_haslo_uzytkownika(login, nowe_haslo_plain):
+    """Resetuje hasło użytkownika (Admin force reset)."""
+    db = get_db_session()
+    try:
+        nowy_hash = hash_password(nowe_haslo_plain)
+        db.query(Uzytkownik).filter(Uzytkownik.LoginName == login).update({Uzytkownik.HasloHash: nowy_hash})
+        db.commit()
+    finally:
+        db.close()
+
+def usun_uzytkownika(id_user):
+    """Usuwa konto systemowe."""
+    db = get_db_session()
+    try:
+        db.query(Uzytkownik).filter(Uzytkownik.IDUser == id_user).delete()
+        db.commit()
+    finally:
+        db.close()
+
+# --- ZARZĄDZANIE SŁOWNIKAMI ---
+
+def dodaj_wartosc_slownika(typ_slownika, wartosc):
+    """
+    Dodaje wartość do odpowiedniej tabeli słownikowej.
+    typ_slownika: 'gatunek', 'status', 'kategoria'
+    """
+    db = get_db_session()
+    model_map = {
+        'gatunek': SlownikGatunek,
+        'status': SlownikStatus,
+        'kategoria': SlownikKategoria
+    }
+    try:
+        Model = model_map.get(typ_slownika)
+        if Model:
+            db.add(Model(Wartosc=wartosc))
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+def usun_wartosc_slownika(typ_slownika, wartosc):
+    """Usuwa wartość ze słownika."""
+    db = get_db_session()
+    model_map = {
+        'gatunek': SlownikGatunek,
+        'status': SlownikStatus,
+        'kategoria': SlownikKategoria
+    }
+    try:
+        Model = model_map.get(typ_slownika)
+        if Model:
+            db.query(Model).filter(Model.Wartosc == wartosc).delete()
+            db.commit()
+    finally:
+        db.close()
+# ==============================================================================
+# KONFIGURACJA ALERTÓW (DODATEK DO ADMINA)
+# ==============================================================================
+
+def pobierz_konfiguracje_alertow():
+    """Pobiera tabelę reguł alertów do edycji."""
+    db = get_db_session()
+    try:
+        q = db.query(KonfiguracjaAlerty)
+        # Używamy pandas do łatwego wyświetlenia w st.data_editor
+        df = pd.read_sql(q.statement, db.bind)
+        return df
+    finally:
+        db.close()
+
+def zapisz_konfiguracje_alertow(edited_df):
+    """Zapisuje zmiany z edytora tabeli (Data Editor)."""
+    db = get_db_session()
+    try:
+        # Iterujemy po wierszach z edytora i aktualizujemy bazę
+        for index, row in edited_df.iterrows():
+            db.query(KonfiguracjaAlerty).filter(KonfiguracjaAlerty.KodPola == row['KodPola']).update({
+                KonfiguracjaAlerty.Etykieta: row['Etykieta'],
+                KonfiguracjaAlerty.DniWaznosci: row['DniWaznosci'],
+                KonfiguracjaAlerty.CzyAktywny: bool(row['CzyAktywny']) # Upewniamy się, że to boolean
+            })
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        print(f"Błąd zapisu alertów: {e}")
+        return False
+    finally:
+        db.close()

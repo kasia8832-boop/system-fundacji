@@ -33,6 +33,7 @@ styles.apply_custom_css()
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'user_name' not in st.session_state: st.session_state.user_name = "User"
 if 'user_role' not in st.session_state: st.session_state.user_role = "Wolontariusz"
+if 'user_id_osoba' not in st.session_state: st.session_state.user_id_osoba = None
 if 'current_module' not in st.session_state: st.session_state.current_module = "home"
 if 'login_mode' not in st.session_state: st.session_state.login_mode = "login"
 if 'view_mode' not in st.session_state: st.session_state.view_mode = "list"

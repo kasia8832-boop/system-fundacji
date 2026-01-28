@@ -1,13 +1,44 @@
 """
-MODUŁ REJESTRU: PRZYJĘCIE (NOWE ZWIERZĘ)
-----------------------------------------
-Szybki formularz dodawania nowego podopiecznego.
-Tworzy kartę zwierzęcia. Szczegóły (Chip, Data Urodzenia, Zdjęcia) 
-dodaje się w trybie Edycji po utworzeniu rekordu.
+MODUŁ REJESTRU: PRZYJĘCIE (Z OPTYMALIZACJĄ ZDJĘĆ)
+-------------------------------------------------
+Formularz dodawania nowego podopiecznego.
+Wersja 4.0:
+- Automatycznie zmniejsza zdjęcia przed zapisem (Max 800px).
+- Drastycznie oszczędza miejsce w bazie i przyspiesza aplikację.
 """
 import streamlit as st
 import time
+import io
+from PIL import Image # Do obróbki zdjęć
 import crud
+
+def compress_image(uploaded_file):
+    """
+    Funkcja pomocnicza: Zmniejsza zdjęcie do max 800x800 px
+    i kompresuje je do formatu JPEG, aby zajmowało mało miejsca.
+    """
+    if uploaded_file is None:
+        return None
+    
+    try:
+        # Otwieramy obraz z bufora
+        image = Image.open(uploaded_file)
+        
+        # Konwertujemy na RGB (na wypadek gdyby to był PNG z przezroczystością)
+        if image.mode in ("RGBA", "P"): 
+            image = image.convert("RGB")
+            
+        # Zmieniamy rozmiar (zachowując proporcje)
+        image.thumbnail((800, 800)) 
+        
+        # Zapisujemy do bufora bajtów jako lekki JPEG
+        output_buffer = io.BytesIO()
+        image.save(output_buffer, format="JPEG", quality=70) # Quality 70 to dobry balans
+        
+        return output_buffer.getvalue()
+    except Exception as e:
+        st.error(f"Błąd przetwarzania zdjęcia: {e}")
+        return None
 
 def render_admission():
     # Przycisk Anuluj
@@ -16,47 +47,68 @@ def render_admission():
         st.rerun()
         
     st.header("📝 Przyjęcie nowego podopiecznego")
-    st.info("Tutaj tworzysz podstawową kartę. Chip, datę urodzenia i opis dodasz w edycji po utworzeniu.")
+    st.info("Zdjęcia są automatycznie zmniejszane, aby baza działała szybko.")
 
-    # 1. Pobieranie słowników (Nowe nazwy funkcji z crud.py)
-    # Używamy try/except na wypadek gdyby słowniki były puste
+    # 1. Pobieranie słowników
     try:
-        sl_gat = crud.get_dictionary("SLOWNIK_GATUNKI")
-        sl_stat = crud.get_dictionary("SLOWNIK_STATUSY")
-    except:
-        sl_gat = ["Pies", "Kot"]
-        sl_stat = ["Do adopcji", "Kwarantanna"]
+        gatunki = crud.pobierz_slownik('gatunek')
+        statusy = crud.pobierz_slownik('status')
+    except Exception:
+        gatunki = ["Pies", "Kot", "Inne"]
+        statusy = ["Do Adopcji", "Kwarantanna"]
     
     # 2. Formularz
     with st.form("adm_form"):
         c1, c2 = st.columns(2)
         
         with c1:
-            imie = st.text_input("Imię")
-            gatunek = st.selectbox("Gatunek", sl_gat)
+            imie = st.text_input("Imię *")
+            gatunek = st.selectbox("Gatunek", gatunki)
+            plec = st.radio("Płeć", ["Samiec", "Samica", "Nieznana"], horizontal=True)
+            
+            st.markdown("---")
+            st.write("Ogłoszenia:")
+            olx = st.checkbox("Ogłoszenie OLX")
+            www = st.checkbox("Ogłoszenie WWW")
             
         with c2:
-            plec = st.radio("Płeć", ["Samiec", "Samica", "Nieznana"], horizontal=True)
-            status = st.selectbox("Status", sl_stat)
-            
-        # UWAGA: Usunęliśmy pola Chip, Urodzenie, Źródło, DT, OLX, WWW
-        # ponieważ funkcja crud.add_animal() w nowej wersji ich nie obsługuje
-        # (zostały przeniesione do edycji szczegółowej).
-            
-        submitted = st.form_submit_button("💾 Utwórz Kartę", type="primary")
+            status = st.selectbox("Status", statusy)
+            # --- ZDJĘCIE ---
+            st.write("Zdjęcie profilowe:")
+            uploaded_file = st.file_uploader("Wybierz plik", type=['jpg', 'png', 'jpeg'])
+
+        st.markdown("---")
+        submitted = st.form_submit_button("💾 Zapisz i przejdź do karty", type="primary")
         
         if submitted:
-            if imie:
-                # Wywołujemy nową, uproszczoną funkcję z crud.py
-                new_id = crud.add_animal(imie, gatunek, plec, status)
-                
-                st.success(f"Dodano zwierzę! Nadano ID: {new_id}")
-                time.sleep(1)
-                
-                # Automatyczne przekierowanie do edycji tego zwierzęcia
-                # żeby użytkownik mógł od razu uzupełnić resztę danych
-                st.session_state.active_animal_id = new_id
-                st.session_state.view_mode = "details" # lub "edit" zależnie od preferencji
-                st.rerun()
-            else: 
+            if not imie:
                 st.error("Imię jest wymagane!")
+            else:
+                # KROK 1: Tworzenie rekordu
+                id_nadzorcy = st.session_state.get('user_id_osoba')
+                new_id = crud.dodaj_nowe_zwierze(imie, gatunek, plec, status, id_nadzorca=id_nadzorcy)
+                
+                if new_id:
+                    # KROK 2: Checkboxy
+                    dane_dodatkowe = {}
+                    if olx: dane_dodatkowe['CzyOgloszenieOLX'] = True
+                    if www: dane_dodatkowe['CzyOgloszenieWWW'] = True
+                    
+                    if dane_dodatkowe:
+                        crud.aktualizuj_dane_podstawowe(new_id, dane_dodatkowe)
+                    
+                    # KROK 3: ZDJĘCIE Z KOMPRESJĄ
+                    if uploaded_file is not None:
+                        # Tu dzieje się magia optymalizacji!
+                        compressed_data = compress_image(uploaded_file)
+                        if compressed_data:
+                            crud.aktualizuj_zdjecie(new_id, compressed_data)
+
+                    st.success(f"Dodano zwierzaka: {imie} (ID: {new_id})")
+                    time.sleep(1)
+                    
+                    st.session_state.active_animal_id = new_id
+                    st.session_state.view_mode = "details"
+                    st.rerun()
+                else:
+                    st.error("Wystąpił błąd podczas zapisu do bazy.")

@@ -1,8 +1,7 @@
 """
-MODUŁ ADMINA: ZARZĄDZANIE SŁOWNIKAMI
-------------------------------------
-Pozwala dodawać i usuwać wartości ze słowników systemowych.
-Wersja 2.0: Używa nowego CRUD.
+MODUŁ ADMINA: SŁOWNIKI
+----------------------
+Wersja 3.0: Nowy CRUD (dodaj/usuń wartość).
 """
 import streamlit as st
 import crud
@@ -15,64 +14,42 @@ def render_dictionaries():
         
     st.header("📚 Zarządzanie Słownikami")
     
-    role = st.session_state.user_role
-    if role == "Wolontariusz" or role == "Dom Tymczasowy":
-         st.error("Brak uprawnień do edycji słowników.")
-         st.stop()
-
-    # Mapa nazw wyświetlanych na nazwy tabel w bazie
-    # UWAGA: Upewnij się, że te nazwy tabel zgadzają się z tymi w bazie (wielka litera/liczba mnoga)
+    # Mapowanie na klucze, które rozumie nasz nowy crud.py
     mapa_slownikow = {
-        "Kategorie Zdarzeń (Oś Czasu)": "SLOWNIK_KATEGORIE",
-        "Gatunki Zwierząt": "SLOWNIK_GATUNKI",
-        "Statusy Zwierzęcia": "SLOWNIK_STATUSY",
-        "Źródła Finansowania": "SLOWNIK_ZRODLO" # Jeśli ta tabela została
+        "Gatunki Zwierząt": "gatunek",
+        "Statusy Zwierzęcia": "status",
+        "Kategorie Zdarzeń": "kategoria"
     }
 
-    wybrany_slownik_label = st.selectbox("Wybierz słownik do edycji", list(mapa_slownikow.keys()))
-    tabela_db = mapa_slownikow[wybrany_slownik_label]
+    wybrany_label = st.selectbox("Wybierz słownik", list(mapa_slownikow.keys()))
+    klucz_crud = mapa_slownikow[wybrany_label]
 
     st.divider()
+    c1, c2 = st.columns(2)
 
-    col_left, col_right = st.columns(2)
-
-    # --- LEWA KOLUMNA: Lista i Usuwanie ---
-    with col_left:
-        st.subheader(f"Lista: {wybrany_slownik_label}")
-        
-        # Nowa funkcja CRUD
-        wartosci = crud.get_dictionary(tabela_db)
+    # --- LISTA ---
+    with c1:
+        st.subheader(f"Lista: {wybrany_label}")
+        wartosci = crud.pobierz_slownik(klucz_crud)
         
         if wartosci:
             for val in wartosci:
-                c1, c2 = st.columns([4, 1])
-                with c1:
-                    st.write(f"• {val}")
-                with c2:
-                    if st.button("🗑️", key=f"del_{tabela_db}_{val}"):
-                        crud.delete_dict_value(tabela_db, val)
-                        st.success("Usunięto!")
-                        time.sleep(0.5)
-                        st.rerun()
+                cols = st.columns([4, 1])
+                cols[0].write(f"• {val}")
+                if cols[1].button("🗑️", key=f"d_{klucz_crud}_{val}"):
+                    crud.usun_wartosc_slownika(klucz_crud, val)
+                    st.rerun()
         else:
-            st.info("Słownik jest pusty.")
+            st.info("Pusto.")
 
-    # --- PRAWA KOLUMNA: Dodawanie ---
-    with col_right:
-        st.subheader("➕ Dodaj nową wartość")
-        with st.form(f"add_{tabela_db}"):
-            nowa_wartosc = st.text_input("Nazwa")
+    # --- DODAWANIE ---
+    with c2:
+        st.subheader("➕ Dodaj")
+        with st.form("add_dic"):
+            nw = st.text_input("Nowa nazwa")
             if st.form_submit_button("Dodaj"):
-                if nowa_wartosc:
-                    if wartosci and nowa_wartosc in wartosci:
-                          st.error("Taka wartość już istnieje!")
-                    else:
-                        crud.add_dict_value(tabela_db, nowa_wartosc)
-                        st.success(f"Dodano: {nowa_wartosc}")
-                        time.sleep(0.5)
-                        st.rerun()
-                else:
-                    st.warning("Wpisz wartość.")
-
-    st.divider()
-    st.info("💡 **Płeć** oraz **Role użytkowników** są stałymi systemowymi.")
+                if nw:
+                    crud.dodaj_wartosc_slownika(klucz_crud, nw)
+                    st.success("Dodano!")
+                    time.sleep(0.5)
+                    st.rerun()

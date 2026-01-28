@@ -2,18 +2,18 @@
 ROUTER MODUŁU: ADMIN
 --------------------
 Główny punkt wejścia do panelu administracyjnego.
-Weryfikuje uprawnienia (Security Check) i kieruje do odpowiedniego pod-modułu
-(Dashboard, Dostęp, Ludzie, Słowniki).
+Poprawka: Dostosowano nazwy ról do bazy ("Admin").
 """
 import streamlit as st
 # Importujemy nasze nowe pod-moduły
+# Upewnij się, że te pliki istnieją w folderze views/admin_modules!
 from views.admin_modules import dashboard, access_control, people_db, dictionaries, alerts_config
 
 def render_admin():
     role = st.session_state.user_role
     
     # 1. SECURITY CHECK - Dom Tymczasowy w ogóle tu nie wchodzi
-    if role == "Dom Tymczasowy":
+    if role == "DT": # W bazie mamy rolę "DT" dla Domów Tymczasowych
         st.error("⛔ BRAK DOSTĘPU - Ten moduł jest niedostępny dla Domów Tymczasowych.")
         if st.button("Wróć"):
             st.session_state.current_module = "home"
@@ -33,21 +33,22 @@ def render_admin():
 
     # 3. Router Admina
     mode = st.session_state.admin_mode
-    # --- PRZYCISK POWROTU DO PULPITU ADMINA ---
-    # Jeśli jesteśmy w jakimkolwiek pod-module (nie dashboard), pokaż przycisk powrotu
+    
+    # Przycisk powrotu do dashboardu
     if mode != "dashboard":
         if st.button("⬅️ Wróć do Pulpitu Admina"):
             st.session_state.admin_mode = "dashboard"
             st.rerun()
         st.write("") # Odstęp
-    # --------------------------------------------------
+
+    # --- LOGIKA MODUŁÓW ---
     if mode == "dashboard":
         dashboard.render_dashboard()
         
     elif mode == "access":
-        # DODATKOWE ZABEZPIECZENIE: Tylko Admin wchodzi w hasła
-        if role != "Administrator": # Pracownik i Wolontariusz nie mogą
-            st.error("⛔ Brak uprawnień do zarządzania kontami.")
+        # Tylko "Admin" ma dostęp do haseł i kont
+        if role != "Admin": 
+            st.error("⛔ Brak uprawnień do zarządzania kontami (Tylko Admin).")
         else:
             access_control.render_access_control()
         

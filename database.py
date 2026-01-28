@@ -1,36 +1,32 @@
 # database.py
-import sqlite3
-import pandas as pd
-import streamlit as st
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+import os
 
-# Nazwa pliku bazy danych
-DB_FILE = 'fundacja.db'
+# 1. KONFIGURACJA BAZY DANYCH
+# Na razie SQLite. Aby przejść na MS SQL, zmienisz tylko ten string (DATABASE_URL).
+# Format MS SQL: "mssql+pyodbc://user:password@server/database?driver=ODBC+Driver+17+for+SQL+Server"
+DATABASE_URL = "sqlite:///fundacja.db"
 
-@st.cache_resource
-def init_connection():
-    # check_same_thread=False jest wymagane przez Streamlit przy SQLite
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    return conn
+# 2. SILNIK (ENGINE)
+# connect_args={'check_same_thread': False} jest potrzebne tylko dla SQLite w Streamlit
+engine = create_engine(
+    DATABASE_URL, 
+    connect_args={'check_same_thread': False} if "sqlite" in DATABASE_URL else {}
+)
 
-def run_query(query, params=None):
-    conn = init_connection()
+# 3. SESJA
+# SessionLocal to "fabryka" sesji. Będziemy jej używać w każdym zapytaniu.
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# 4. BAZA MODELI
+# Wszystkie nasze tabele (klasy) będą dziedziczyć po tej klasie.
+Base = declarative_base()
+
+def get_db():
+    """Funkcja pomocnicza do tworzenia i zamykania sesji (Context Manager)"""
+    db = SessionLocal()
     try:
-        # SQLite wymaga krotki (tuple) nawet dla jednego parametru
-        return pd.read_sql(query, conn, params=params)
-    except Exception as e:
-        st.error(f"Błąd SQL (Query): {e}\nZapytanie: {query}")
-        return pd.DataFrame()
-
-def run_command(command, params=None):
-    conn = init_connection()
-    try:
-        cursor = conn.cursor()
-        if params:
-            cursor.execute(command, params)
-        else:
-            cursor.execute(command)
-        conn.commit()
-        return True
-    except Exception as e:
-        st.error(f"Błąd SQL (Command): {e}\nKomenda: {command}")
-        return False
+        yield db
+    finally:
+        db.close()

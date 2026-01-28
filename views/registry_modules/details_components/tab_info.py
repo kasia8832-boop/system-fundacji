@@ -2,7 +2,7 @@
 KOMPONENT KARTY: ZAKŁADKA 'DANE'
 --------------------------------
 Wyświetla szczegółowe dane metryczkowe zwierzęcia.
-Wersja 2.0: Dostosowana do nowej bazy (DataPrzyjecia, brak danych DT).
+Wersja 3.0: Usunięto nieistniejące pole 'DaneAdoptujacego'.
 """
 import streamlit as st
 import pandas as pd
@@ -10,11 +10,11 @@ import pandas as pd
 def render_tab(r):
     st.subheader("📋 Metryczka")
     
-    # Układ w dwóch kolumnach dla lepszej czytelności
+    # Układ w dwóch kolumnach
     c1, c2 = st.columns(2)
     
     with c1:
-        # DATA PRZYJĘCIA - To jest to nowe pole, o które prosiłeś
+        # DATA PRZYJĘCIA
         data_przyjecia = r.get('DataPrzyjecia')
         if not data_przyjecia:
             data_przyjecia = "Brak danych"
@@ -27,11 +27,11 @@ def render_tab(r):
         st.markdown(f"**🐕 Rasa:** {r.get('Rasa', 'Mieszaniec')}")
         st.markdown(f"**⚧ Płeć:** {r.get('Plec', '-')}")
         
-        # Wyświetlamy status w ładnym kolorze
+        # Status
         status = r.get('StatusZwierzecia', 'Nieznany')
         if status == "W trakcie leczenia":
             st.warning(f"**Status:** {status}")
-        elif status == "Gotowy do adopcji":
+        elif status == "Adoptowany":
             st.success(f"**Status:** {status}")
         else:
             st.info(f"**Status:** {status}")
@@ -45,13 +45,14 @@ def render_tab(r):
     else:
         st.caption("Brak dodatkowego opisu.")
 
-    # Informacja o lokalizacji (DT) została usunięta, 
-    # ponieważ w nowym modelu bazy nie ma bezpośredniego powiązania w tabeli ZWIERZE.
     st.divider()
     
-    # Wyświetlamy dane adopcyjne tylko jeśli są dostępne
+    # Sekcja Adopcji - uproszczona (bo dane są teraz w tabeli Osoba)
     if r.get('StatusZwierzecia') == 'Adoptowany':
         st.subheader("🏠 Informacje o Adopcji")
-        st.markdown(f"**Data Adopcji:** {r.get('DataAdopcji', 'Brak daty')}")
-        st.markdown("**Dane Adoptującego:**")
-        st.info(r.get('DaneAdoptujacego', 'Brak danych'))
+        # IDOpiekun to liczba (ID osoby w bazie)
+        id_opiekuna = r.get('IDOpiekun')
+        if id_opiekuna:
+            st.info(f"Zwierzę ma przypisanego opiekuna w systemie (ID Osoby: {id_opiekuna}). Szczegóły kontaktu znajdziesz w Panelu Admina -> Baza Osób.")
+        else:
+            st.warning("Status to 'Adoptowany', ale nie przypisano ID opiekuna w bazie.")
