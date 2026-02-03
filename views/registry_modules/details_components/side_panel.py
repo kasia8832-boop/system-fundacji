@@ -1,63 +1,84 @@
 """
-KOMPONENT KARTY: PANEL BOCZNY (SIDE PANEL)
-------------------------------------------
-Wyświetla główne zdjęcie (BLOB) oraz kluczowe metryki (Wiek, Płeć, Chip).
-Wersja 2.0: Obsługa zdjęć binarnych i nowych formatów danych.
+KOMPONENT KARTY: PANEL BOCZNY
+-----------------------------
+Zdjęcie + Mikro-Karty.
+Poprawka: OLX i WWW jedno pod drugim (pionowo).
 """
 import streamlit as st
-import pandas as pd
-from datetime import date
+import crud
 
 def render_side_panel(r):
-    # 1. ZDJĘCIE (Obsługa pola BLOB 'Zdjecie')
+    # 1. ZDJĘCIE
     photo_data = r.get('Zdjecie')
     
+    st.markdown('<div class="profile-photo">', unsafe_allow_html=True)
     if photo_data:
-        # Streamlit potrafi wyświetlić bajty bezpośrednio
-        st.image(photo_data, caption=r.get('Imie'), use_container_width=True)
+        st.image(photo_data, use_container_width=True)
     else:
-        # Placeholder, jeśli brak zdjęcia
         st.image("https://place.dog/400/400", caption="Brak zdjęcia", use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    st.divider()
+    # 2. DANE ORGANIZACYJNE
+    
+    # Rozwiązywanie nazwisk
+    id_nadzor = r.get('IDNadzor')
+    id_opiekun = r.get('IDOpiekun')
+    nazwa_nadzor = "-"
+    nazwa_opiekun = "-"
 
-    # 2. STATUS
-    status = r.get('StatusZwierzecia', 'Nieznany')
-    if status == 'Adoptowany': 
-        st.success(f"🏠 {status}")
-    elif status == 'Gotowy do adopcji' or status == 'Do adopcji': 
-        st.success(f"🟢 {status}")
-    elif status == 'W trakcie leczenia':
-        st.warning(f"💊 {status}")
-    else: 
-        st.info(f"ℹ️ {status}")
-    
-    # 3. METRYKI
-    # Obliczanie wieku (zabezpieczone przed brakiem daty)
-    data_ur = r.get('DataUrodzenia')
-    wiek_str = "?"
-    
-    if data_ur:
-        try:
-            # Konwersja na datetime, jeśli to string
-            dt_ur = pd.to_datetime(data_ur)
-            lata = date.today().year - dt_ur.year
-            wiek_str = f"ok. {lata} lat"
-        except:
-            wiek_str = "?"
-            
-    # Jeśli obliczenie się nie uda, sprawdźmy pole opisowe
-    if wiek_str == "?" and r.get('WiekOpisowy'):
-        wiek_str = r['WiekOpisowy']
+    try:
+        df_ludzie = crud.get_all_people()
+        if not df_ludzie.empty:
+            mapa_ludzi = {row['IDOsoba']: f"{row['Imie']} {row['Nazwisko']}" for _, row in df_ludzie.iterrows()}
+            if id_nadzor: nazwa_nadzor = mapa_ludzi.get(id_nadzor, f"ID: {id_nadzor}")
+            if id_opiekun: nazwa_opiekun = mapa_ludzi.get(id_opiekun, f"ID: {id_opiekun}")
+    except: pass
 
-    # Wyświetlanie kafelków (Metrics)
-    m1, m2 = st.columns(2)
+    # --- RENDEROWANIE MIKRO-KART HTML ---
     
-    # Płeć: W nowej bazie mamy pełne słowa ("Samiec", "Samica"), więc wyświetlamy wprost
-    plec = r.get('Plec', 'Nieznana')
-    m1.metric("Płeć", plec)
+    # Karta 1: Nadzór
+    st.markdown(f"""
+    <div class="info-tile">
+        <div class="info-label">Osoba Nadzorująca</div>
+        <div class="info-value">🩺 {nazwa_nadzor}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Karta 2: Opiekun
+    st.markdown(f"""
+    <div class="info-tile">
+        <div class="info-label">Opiekun / DT</div>
+        <div class="info-value">🏠 {nazwa_opiekun}</div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    m2.metric("Wiek", wiek_str)
+    # Karta 3: Finansowanie
+    zrodlo = r.get('ZrodloFinansowania', '-')
+    st.markdown(f"""
+    <div class="info-tile" style="border-left-color: #2ecc71;">
+        <div class="info-label">Finansowanie</div>
+        <div class="info-value">💰 {zrodlo}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Karta 4: Ogłoszenia (Pionowo)
+    olx = r.get('CzyOgloszenieOLX', False)
+    www = r.get('CzyOgloszenieWWW', False)
     
-    chip = r.get('NrChip')
-    st.metric("Nr Chip", chip if chip else "Brak")
+    c_olx = "#2ecc71" if olx else "#7f8c8d"
+    c_www = "#2ecc71" if www else "#7f8c8d"
+    t_olx = "AKTYWNE" if olx else "BRAK"
+    t_www = "AKTYWNE" if www else "BRAK"
+
+    st.markdown(f"""
+    <div class="info-tile" style="border-left-color: #9b59b6;">
+        <div style="margin-bottom: 8px;">
+            <div class="info-label">OLX</div>
+            <div class="info-value" style="color: {c_olx}; font-size: 13px;">● {t_olx}</div>
+        </div>
+        <div>
+            <div class="info-label">WWW</div>
+            <div class="info-value" style="color: {c_www}; font-size: 13px;">● {t_www}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)

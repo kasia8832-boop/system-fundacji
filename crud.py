@@ -3,7 +3,6 @@
 MODUŁ: CRUD (Create, Read, Update, Delete) - Wersja ORM (SQLAlchemy)
 --------------------------------------------------------------------
 Odpowiada za logikę biznesową i komunikację z bazą danych.
-Teraz korzysta z klas zdefiniowanych w models.py, zamiast surowego SQL.
 """
 import pandas as pd
 import hashlib
@@ -37,24 +36,17 @@ def hash_password(password: str) -> str:
 # ==============================================================================
 
 def verify_user(login_input, password_input):
-    """
-    Weryfikuje logowanie.
-    Zwraca: (Rola, LoginName, IDOsoba) lub (None, None, None)
-    """
+    """Weryfikuje logowanie."""
     db = get_db_session()
     try:
-        # Szukamy użytkownika po loginie
         user = db.query(Uzytkownik).filter(Uzytkownik.LoginName == login_input, Uzytkownik.CzyAktywny == True).first()
-        
         if user:
             input_hash = hash_password(password_input)
             if user.HasloHash == input_hash:
-                # Zwracamy IDOsoba, aby wiedzieć kim fizycznie jest ten user (np. dla DT)
                 return user.Rola, user.LoginName, user.IDOsoba
-                
         return None, None, None
     finally:
-        db.close() # Zawsze zamykamy sesję!
+        db.close()
 
 def create_user(login, email, password, rola, id_osoba=None):
     """Tworzy nowego użytkownika systemowego."""
@@ -65,14 +57,14 @@ def create_user(login, email, password, rola, id_osoba=None):
             Email=email,
             HasloHash=hash_password(password),
             Rola=rola,
-            IDOsoba=id_osoba, # Powiązanie z tabelą OSOBA
+            IDOsoba=id_osoba,
             CzyAktywny=True
         )
         db.add(new_user)
         db.commit()
         return True, "Użytkownik utworzony."
     except Exception as e:
-        db.rollback() # Cofnij zmiany w razie błędu
+        db.rollback()
         return False, f"Błąd: {e}"
     finally:
         db.close()
@@ -82,30 +74,21 @@ def create_user(login, email, password, rola, id_osoba=None):
 # ==============================================================================
 
 def pobierz_liste_zwierzat(id_opiekun_dt=None):
-    """
-    Pobiera DataFrame do kafelków na stronie głównej (Listing).
-    Filtracja:
-    - Jeśli id_opiekun_dt jest podane -> pokazuje tylko zwierzęta przypisane do tego DT.
-    - Ukrywa zwierzęta 'Za Tęczowym Mostem'.
-    """
+    """Pobiera prostą listę (np. do kafelków na dashboardzie)."""
     db = get_db_session()
     try:
-        # Budujemy zapytanie (Query)
         q = db.query(
             Zwierze.IDZwierze, 
             Zwierze.Imie, 
             Zwierze.Rasa, 
             Zwierze.StatusZwierzecia, 
             Zwierze.Zdjecie,
-            Zwierze.IDOpiekun # Potrzebne do weryfikacji
+            Zwierze.IDOpiekun
         ).filter(Zwierze.StatusZwierzecia != 'Za Tęczowym Mostem')
 
-        # Jeśli to DT, dodajemy filtr WHERE IDOpiekun = ...
         if id_opiekun_dt:
             q = q.filter(Zwierze.IDOpiekun == id_opiekun_dt)
 
-        # Pobieramy dane do Pandas DataFrame
-        # statement to skompilowany SQL, db.bind to połączenie
         df = pd.read_sql(q.statement, db.bind)
         return df
     except Exception as e:
@@ -114,8 +97,42 @@ def pobierz_liste_zwierzat(id_opiekun_dt=None):
     finally:
         db.close()
 
+def pobierz_rejestr_rozszerzony():
+    """
+    Pobiera listę zwierząt wraz z IMIONAMI opiekunów (JOIN),
+    zamiast samych ID. Potrzebne do głównej tabeli Rejestru.
+    """
+    db = get_db_session()
+    try:
+        # Łączymy ZWIERZE z OSOBA (dwa razy: raz dla Opiekuna, raz dla Nadzoru)
+        query = text("""
+            SELECT 
+                z.IDZwierze, 
+                z.Imie, 
+                z.Gatunek, 
+                z.Rasa, 
+                z.Plec, 
+                z.StatusZwierzecia, 
+                z.DataUrodzenia,
+                z.NrChip,
+                -- Sklejamy Imię i Nazwisko Opiekuna
+                (o1.Imie || ' ' || o1.Nazwisko) AS OpiekunNazwa,
+                -- Sklejamy Imię i Nazwisko Nadzorcy (Wolontariusza)
+                (o2.Imie || ' ' || o2.Nazwisko) AS NadzorcaNazwa
+            FROM ZWIERZE z
+            LEFT JOIN OSOBA o1 ON z.IDOpiekun = o1.IDOsoba
+            LEFT JOIN OSOBA o2 ON z.IDNadzor = o2.IDOsoba
+            ORDER BY z.IDZwierze DESC
+        """)
+        
+        # Używamy pandas read_sql z zapytaniem tekstowym
+        df = pd.read_sql(query, db.bind)
+        return df
+    finally:
+        db.close()
+
 def pobierz_szczegoly_zwierzecia(id_zwierze):
-    """Pobiera pełny obiekt zwierzęcia (wraz z polami medycznymi)."""
+    """Pobiera pełny obiekt zwierzęcia."""
     db = get_db_session()
     try:
         zwierze = db.query(Zwierze).filter(Zwierze.IDZwierze == id_zwierze).first()
@@ -123,54 +140,63 @@ def pobierz_szczegoly_zwierzecia(id_zwierze):
     finally:
         db.close()
 
-def dodaj_nowe_zwierze(imie, gatunek, plec, status, id_nadzorca=None):
-    """Rejestruje nowe zwierzę."""
+def dodaj_nowe_zwierze(imie, gatunek, rasa, plec, status, id_nadzorca=None, id_opiekun=None, nr_chip=None, zrodlo=None, data_przyjecia=None, data_urodzenia=None, opis=None, czy_olx=False, czy_www=False, zdjecie_blob=None):
+    """
+    Rejestruje nowe zwierzę z PEŁNYM zestawem danych.
+    """
     db = get_db_session()
     try:
+        if not data_przyjecia:
+            data_przyjecia = date.today()
+
         nowe = Zwierze(
             Imie=imie,
             Gatunek=gatunek,
+            Rasa=rasa,
             Plec=plec,
             StatusZwierzecia=status,
-            IDNadzor=id_nadzorca, # Kto wprowadza/opiekuje się z ramienia fundacji
-            DataPrzyjecia=date.today()
+            IDNadzor=id_nadzorca,
+            IDOpiekun=id_opiekun,
+            NrChip=nr_chip,
+            ZrodloFinansowania=zrodlo,
+            DataPrzyjecia=data_przyjecia,
+            # Nowe pola:
+            DataUrodzenia=data_urodzenia,
+            Opis=opis,
+            CzyOgloszenieOLX=czy_olx,
+            CzyOgloszenieWWW=czy_www,
+            Zdjecie=zdjecie_blob
         )
         db.add(nowe)
         db.commit()
         return nowe.IDZwierze
     except Exception as e:
         db.rollback()
-        print(e)
+        print(f"Błąd dodawania zwierzęcia: {e}")
         return None
     finally:
         db.close()
 
 # ==============================================================================
-# ✏️ 3. EDYCJA DANYCH (ZWIERZĘ + MEDYCZNE)
+# ✏️ 3. EDYCJA DANYCH
 # ==============================================================================
 
 def aktualizuj_dane_podstawowe(id_zwierze, dane_dict):
-    """
-    Aktualizuje podstawowe pola (Imie, Rasa, Chip itp.)
-    dane_dict: słownik {NazwaPolaModelu: Wartość}
-    """
+    """Aktualizuje podstawowe pola."""
     db = get_db_session()
     try:
-        # Pobieramy obiekt do edycji
         zwierze = db.query(Zwierze).filter(Zwierze.IDZwierze == id_zwierze).first()
         if not zwierze:
             return False
 
-        # Aktualizujemy pola dynamicznie
         for key, value in dane_dict.items():
-            if hasattr(zwierze, key): # Sprawdź czy pole istnieje w modelu
+            if hasattr(zwierze, key):
                 setattr(zwierze, key, value)
         
         db.commit()
         return True
     except Exception as e:
         db.rollback()
-        print(f"Błąd update: {e}")
         return False
     finally:
         db.close()
@@ -185,18 +211,13 @@ def aktualizuj_zdjecie(id_zwierze, bytes_data):
         db.close()
 
 def adoptuj_zwierze(id_zwierze, id_nowy_wlasciciel):
-    """
-    Finalizacja adopcji:
-    1. Zmienia status na 'Adoptowany'.
-    2. Przypisuje IDOpiekun = id_nowy_wlasciciel.
-    """
+    """Finalizacja adopcji."""
     db = get_db_session()
     try:
         zwierze = db.query(Zwierze).filter(Zwierze.IDZwierze == id_zwierze).first()
         if zwierze:
             zwierze.StatusZwierzecia = 'Adoptowany'
             zwierze.IDOpiekun = id_nowy_wlasciciel
-            # zwierze.DataAdopcji - usunęliśmy to pole z bazy, historia załatwi sprawę daty
             db.commit()
             return True
         return False
@@ -211,10 +232,7 @@ def adoptuj_zwierze(id_zwierze, id_nowy_wlasciciel):
 # ==============================================================================
 
 def dodaj_wpis_historii(id_zwierze, id_user, kategoria, opis):
-    """
-    Dodaje zdarzenie do historii.
-    WAŻNE: id_user to ID zalogowanego UZYTKOWNIKA, nie Osoby.
-    """
+    """Dodaje zdarzenie do historii."""
     db = get_db_session()
     try:
         wpis = HistoriaZdarzen(
@@ -234,13 +252,11 @@ def dodaj_wpis_historii(id_zwierze, id_user, kategoria, opis):
         db.close()
 
 def pobierz_historie(id_zwierze):
-    """Pobiera historię jako DataFrame (do wyświetlenia tabeli)."""
+    """Pobiera historię jako DataFrame."""
     db = get_db_session()
     try:
-        # Łączymy (JOIN) z tabelą Uzytkownik, żeby pobrać Login autora wpisu
-        # POPRAWKA: Dodano HistoriaZdarzen.IDHistoria do zapytania!
         q = db.query(
-            HistoriaZdarzen.IDHistoria,      # <--- TO BYŁO KLUCZOWE
+            HistoriaZdarzen.IDHistoria,
             HistoriaZdarzen.DataZdarzenia,
             HistoriaZdarzen.Kategoria,
             HistoriaZdarzen.Opis,
@@ -255,16 +271,15 @@ def pobierz_historie(id_zwierze):
         db.close()
 
 # ==============================================================================
-# 👥 5. OSOBY (Słownik Ludzi)
+# 👥 5. OSOBY
 # ==============================================================================
 
 def pobierz_wszystkie_osoby():
-    """Zwraca DataFrame wszystkich osób (do selectboxów)."""
+    """Zwraca DataFrame wszystkich osób."""
     db = get_db_session()
     try:
         q = db.query(Osoba.IDOsoba, Osoba.Imie, Osoba.Nazwisko, Osoba.AdresMiasto)
         df = pd.read_sql(q.statement, db.bind)
-        # Tworzymy kolumnę pomocniczą do wyświetlania w SelectBox (np. "Jan Kowalski (Warszawa)")
         if not df.empty:
             df['Display'] = df['Imie'] + " " + df['Nazwisko'] + " (" + df['AdresMiasto'].fillna('-') + ")"
         return df
@@ -291,16 +306,19 @@ def dodaj_osobe(imie, nazwisko, telefon, email, miasto, ulica, lokal, kod):
 # 📚 6. SŁOWNIKI
 # ==============================================================================
 
+def get_dictionary(nazwa_modelu): # Alias dla kompatybilności
+    return pobierz_slownik(nazwa_modelu)
+
 def pobierz_slownik(nazwa_modelu):
-    """
-    Pobiera wartości ze słownika.
-    nazwa_modelu: np. 'gatunek', 'status'
-    """
+    """Pobiera wartości ze słownika."""
     db = get_db_session()
     model_map = {
         'gatunek': SlownikGatunek,
         'status': SlownikStatus,
-        'kategoria': SlownikKategoria
+        'kategoria': SlownikKategoria,
+        'SLOWNIK_GATUNKI': SlownikGatunek,    # Aliasy
+        'SLOWNIK_STATUSY': SlownikStatus,
+        'SLOWNIK_KATEGORIE': SlownikKategoria
     }
     
     try:
@@ -308,86 +326,73 @@ def pobierz_slownik(nazwa_modelu):
         if not model: return []
         
         wyniki = db.query(model.Wartosc).all()
-        return [w[0] for w in wyniki] # Spłaszczamy listę krotek do listy stringów
+        return [w[0] for w in wyniki]
     finally:
         db.close()
+
+# Aliasy do usuwania/dodawania (dla kompatybilności z adminem)
+def delete_dict_value(typ, wartosc): usun_wartosc_slownika(typ, wartosc)
+def add_dict_value(typ, wartosc): dodaj_wartosc_slownika(typ, wartosc)
+
 # ==============================================================================
-# 🚨 7. POWIADOMIENIA I ALERTY (DODANE)
+# 🚨 7. POWIADOMIENIA I ALERTY
 # ==============================================================================
 
 def pobierz_alerty_medyczne():
-    """
-    Skanuje bazę w poszukiwaniu przeterminowanych szczepień i badań.
-    Zwraca listę słowników z alertami.
-    """
+    """Generuje alerty medyczne."""
     db = get_db_session()
     alerty = []
     dzis = date.today()
-    
     try:
-        # 1. Pobieramy aktywne reguły alertów
         reguly = db.query(KonfiguracjaAlerty).filter(KonfiguracjaAlerty.CzyAktywny == True).all()
-        if not reguly:
-            return []
+        if not reguly: return []
 
-        # 2. Pobieramy zwierzęta (tylko te, które są pod opieką fundacji)
-        # Wykluczamy adoptowane i nieżyjące
         zwierzeta = db.query(Zwierze).filter(
             Zwierze.StatusZwierzecia.notin_(['Adoptowany', 'Za Tęczowym Mostem'])
         ).all()
 
-        # 3. Pętla sprawdzająca
         for zwierzak in zwierzeta:
             for regula in reguly:
-                pole = regula.KodPola      # np. "SzczepienieWscieklizna"
+                pole = regula.KodPola
                 limit_dni = regula.DniWaznosci
                 etykieta = regula.Etykieta
-                
-                # Pobieramy wartość pola dynamicznie z obiektu Zwierze
-                # getattr(obiekt, "NazwaPola") to to samo co obiekt.NazwaPola
                 data_baza = getattr(zwierzak, pole, None)
                 
-                if not data_baza:
-                    continue # Brak daty wpisanej = brak weryfikacji (lub można dodać alert "Brak danych")
+                if not data_baza: continue
 
-                # --- A. LOGIKA DLA OCHRONY PRZECIW KLESZCZOM (Data "Ważne do") ---
                 if pole == 'OchronaKleszczeDo':
-                    # Tutaj data w bazie to data WYGAŚNIĘCIA, a nie zabiegu
                     dni_po_terminie = (dzis - data_baza).days
-                    
-                    if dni_po_terminie > 0: # Jeśli dzis jest po dacie wygaśnięcia
+                    if dni_po_terminie > 0:
                         alerty.append({
                             "id": zwierzak.IDZwierze,
                             "imie": zwierzak.Imie,
                             "chip": zwierzak.NrChip,
                             "typ": "Wygasła Ochrona",
-                            "komunikat": f"{etykieta}: wygasła {data_baza} ({dni_po_terminie} dni temu)"
+                            "komunikat": f"{etykieta}: wygasła {data_baza} ({dni_po_terminie} dni temu)",
+                            "DniPoTerminie": dni_po_terminie,
+                            "Rodzaj": etykieta
                         })
-
-                # --- B. LOGIKA DLA SZCZEPIEŃ (Data zabiegu + Okres ważności) ---
                 else:
-                    # Tutaj data w bazie to data ZABIEGU. Dodajemy do niej dni ważności.
                     dni_od_zabiegu = (dzis - data_baza).days
-                    
                     if dni_od_zabiegu > limit_dni:
                         alerty.append({
                             "id": zwierzak.IDZwierze,
                             "imie": zwierzak.Imie,
                             "chip": zwierzak.NrChip,
                             "typ": "Przeterminowane",
-                            "komunikat": f"{etykieta}: minęło {dni_od_zabiegu} dni (Limit: {limit_dni})"
+                            "komunikat": f"{etykieta}: minęło {dni_od_zabiegu} dni (Limit: {limit_dni})",
+                            "DniPoTerminie": dni_od_zabiegu - limit_dni,
+                            "Rodzaj": etykieta
                         })
-
         return alerty
-
     except Exception as e:
-        print(f"Błąd generowania alertów: {e}")
+        print(f"Błąd alertów: {e}")
         return []
     finally:
         db.close()
 
 # ==============================================================================
-# 📂 8. ZAŁĄCZNIKI I HISTORIA (BRAKUJĄCE FUNKCJE)
+# 📂 8. ZAŁĄCZNIKI I HISTORIA
 # ==============================================================================
 
 def usun_wpis_historii(id_historia):
@@ -407,18 +412,11 @@ def usun_wpis_historii(id_historia):
         db.close()
 
 def pobierz_liste_zalacznikow(id_historia):
-    """
-    Pobiera listę plików BEZ ich zawartości (żeby nie zapchać pamięci).
-    Oblicza rozmiar pliku na podstawie długości BLOBa.
-    """
+    """Pobiera listę plików."""
     db = get_db_session()
     try:
-        # SQLAlchmey nie ma prostego func.length dla BLOB w każdym dialekcie,
-        # więc pobierzemy obiekty, ale deferujemy (opóźniamy) pobranie DaneBLOB
         from sqlalchemy.orm import defer
-        
         pliki = db.query(Zalacznik).filter(Zalacznik.IDHistoria == id_historia).all()
-        
         data = []
         for p in pliki:
             rozmiar = len(p.DaneBLOB) if p.DaneBLOB else 0
@@ -431,9 +429,12 @@ def pobierz_liste_zalacznikow(id_historia):
         return pd.DataFrame(data)
     finally:
         db.close()
+        
+# Alias dla kompatybilności ze starym kodem
+def pobierz_zalaczniki(id_historia): return pobierz_liste_zalacznikow(id_historia)
 
 def pobierz_plik_content(id_zalacznik):
-    """Pobiera pełną zawartość pliku (BLOB) do pobrania."""
+    """Pobiera content pliku."""
     db = get_db_session()
     try:
         plik = db.query(Zalacznik).filter(Zalacznik.IDZalacznik == id_zalacznik).first()
@@ -444,11 +445,10 @@ def pobierz_plik_content(id_zalacznik):
         db.close()
 
 def dodaj_zalacznik(id_historia, uploaded_file):
-    """Zapisuje plik w bazie."""
+    """Zapisuje plik."""
     db = get_db_session()
     try:
         bytes_data = uploaded_file.getvalue()
-        
         nowy = Zalacznik(
             IDHistoria=id_historia,
             NazwaPliku=uploaded_file.name,
@@ -465,7 +465,7 @@ def dodaj_zalacznik(id_historia, uploaded_file):
         db.close()
 
 def usun_zalacznik(id_zalacznik):
-    """Usuwa pojedynczy plik."""
+    """Usuwa plik."""
     db = get_db_session()
     try:
         plik = db.query(Zalacznik).filter(Zalacznik.IDZalacznik == id_zalacznik).first()
@@ -476,24 +476,30 @@ def usun_zalacznik(id_zalacznik):
         db.close()
 
 # ==============================================================================
-# 🛠️ 8. ADMINISTRACJA (DODATKI DO CRUD.PY)
+# 🛠️ 9. ADMINISTRACJA
 # ==============================================================================
 
-# --- ZARZĄDZANIE UŻYTKOWNIKAMI ---
-
+# Userzy
 def pobierz_wszystkich_uzytkownikow():
-    """Zwraca DataFrame z listą użytkowników systemu."""
     db = get_db_session()
     try:
-        # Pobieramy też rolę z tabeli OSOBA jeśli jest powiązanie (opcjonalne)
         q = db.query(Uzytkownik.IDUser, Uzytkownik.LoginName, Uzytkownik.Email, Uzytkownik.Rola, Uzytkownik.CzyAktywny)
         df = pd.read_sql(q.statement, db.bind)
+        # Rename dla kompatybilności z adminem (ID_User vs IDUser)
+        df.rename(columns={'IDUser': 'ID_User'}, inplace=True)
         return df
     finally:
         db.close()
 
+# Aliasy
+def get_all_users(): return pobierz_wszystkich_uzytkownikow()
+def get_all_people(): return pobierz_wszystkie_osoby() # Dla admina
+def add_person(*args): return dodaj_osobe(*args)
+def delete_user(uid): usun_uzytkownika(uid)
+def toggle_user_status(uid, status): zmien_status_uzytkownika(uid, status)
+def change_user_password(login, pwd): zmien_haslo_uzytkownika(login, pwd)
+
 def zmien_status_uzytkownika(id_user, obecny_status):
-    """Blokuje lub odblokowuje konto."""
     db = get_db_session()
     try:
         nowy_status = not bool(obecny_status)
@@ -503,7 +509,6 @@ def zmien_status_uzytkownika(id_user, obecny_status):
         db.close()
 
 def zmien_haslo_uzytkownika(login, nowe_haslo_plain):
-    """Resetuje hasło użytkownika (Admin force reset)."""
     db = get_db_session()
     try:
         nowy_hash = hash_password(nowe_haslo_plain)
@@ -513,7 +518,6 @@ def zmien_haslo_uzytkownika(login, nowe_haslo_plain):
         db.close()
 
 def usun_uzytkownika(id_user):
-    """Usuwa konto systemowe."""
     db = get_db_session()
     try:
         db.query(Uzytkownik).filter(Uzytkownik.IDUser == id_user).delete()
@@ -521,18 +525,14 @@ def usun_uzytkownika(id_user):
     finally:
         db.close()
 
-# --- ZARZĄDZANIE SŁOWNIKAMI ---
-
+# Słowniki
 def dodaj_wartosc_slownika(typ_slownika, wartosc):
-    """
-    Dodaje wartość do odpowiedniej tabeli słownikowej.
-    typ_slownika: 'gatunek', 'status', 'kategoria'
-    """
     db = get_db_session()
+    # Mapowanie nazw tabel (SLOWNIK_XXX) na modele
     model_map = {
-        'gatunek': SlownikGatunek,
-        'status': SlownikStatus,
-        'kategoria': SlownikKategoria
+        'gatunek': SlownikGatunek, 'SLOWNIK_GATUNKI': SlownikGatunek,
+        'status': SlownikStatus, 'SLOWNIK_STATUSY': SlownikStatus,
+        'kategoria': SlownikKategoria, 'SLOWNIK_KATEGORIE': SlownikKategoria
     }
     try:
         Model = model_map.get(typ_slownika)
@@ -545,12 +545,11 @@ def dodaj_wartosc_slownika(typ_slownika, wartosc):
         db.close()
 
 def usun_wartosc_slownika(typ_slownika, wartosc):
-    """Usuwa wartość ze słownika."""
     db = get_db_session()
     model_map = {
-        'gatunek': SlownikGatunek,
-        'status': SlownikStatus,
-        'kategoria': SlownikKategoria
+        'gatunek': SlownikGatunek, 'SLOWNIK_GATUNKI': SlownikGatunek,
+        'status': SlownikStatus, 'SLOWNIK_STATUSY': SlownikStatus,
+        'kategoria': SlownikKategoria, 'SLOWNIK_KATEGORIE': SlownikKategoria
     }
     try:
         Model = model_map.get(typ_slownika)
@@ -559,31 +558,25 @@ def usun_wartosc_slownika(typ_slownika, wartosc):
             db.commit()
     finally:
         db.close()
-# ==============================================================================
-# KONFIGURACJA ALERTÓW (DODATEK DO ADMINA)
-# ==============================================================================
 
+# Alerty Config (Admin)
 def pobierz_konfiguracje_alertow():
-    """Pobiera tabelę reguł alertów do edycji."""
     db = get_db_session()
     try:
         q = db.query(KonfiguracjaAlerty)
-        # Używamy pandas do łatwego wyświetlenia w st.data_editor
         df = pd.read_sql(q.statement, db.bind)
         return df
     finally:
         db.close()
 
 def zapisz_konfiguracje_alertow(edited_df):
-    """Zapisuje zmiany z edytora tabeli (Data Editor)."""
     db = get_db_session()
     try:
-        # Iterujemy po wierszach z edytora i aktualizujemy bazę
         for index, row in edited_df.iterrows():
             db.query(KonfiguracjaAlerty).filter(KonfiguracjaAlerty.KodPola == row['KodPola']).update({
                 KonfiguracjaAlerty.Etykieta: row['Etykieta'],
                 KonfiguracjaAlerty.DniWaznosci: row['DniWaznosci'],
-                KonfiguracjaAlerty.CzyAktywny: bool(row['CzyAktywny']) # Upewniamy się, że to boolean
+                KonfiguracjaAlerty.CzyAktywny: bool(row['CzyAktywny'])
             })
         db.commit()
         return True

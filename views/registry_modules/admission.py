@@ -1,112 +1,195 @@
 """
-MODUŁ REJESTRU: PRZYJĘCIE (Z OPTYMALIZACJĄ ZDJĘĆ)
--------------------------------------------------
-Formularz dodawania nowego podopiecznego.
-Wersja 4.0:
-- Automatycznie zmniejsza zdjęcia przed zapisem (Max 800px).
-- Drastycznie oszczędza miejsce w bazie i przyspiesza aplikację.
+MODUŁ REJESTRU: PRZYJĘCIE ZWIERZĘCIA
+------------------------------------
+Wersja 2.0: Pełny zestaw pól (Data ur., Zdjęcie, Opis, Ogłoszenia).
 """
 import streamlit as st
-import time
-import io
-from PIL import Image # Do obróbki zdjęć
 import crud
+from datetime import date
 
-def compress_image(uploaded_file):
-    """
-    Funkcja pomocnicza: Zmniejsza zdjęcie do max 800x800 px
-    i kompresuje je do formatu JPEG, aby zajmowało mało miejsca.
-    """
-    if uploaded_file is None:
-        return None
-    
-    try:
-        # Otwieramy obraz z bufora
-        image = Image.open(uploaded_file)
-        
-        # Konwertujemy na RGB (na wypadek gdyby to był PNG z przezroczystością)
-        if image.mode in ("RGBA", "P"): 
-            image = image.convert("RGB")
-            
-        # Zmieniamy rozmiar (zachowując proporcje)
-        image.thumbnail((800, 800)) 
-        
-        # Zapisujemy do bufora bajtów jako lekki JPEG
-        output_buffer = io.BytesIO()
-        image.save(output_buffer, format="JPEG", quality=70) # Quality 70 to dobry balans
-        
-        return output_buffer.getvalue()
-    except Exception as e:
-        st.error(f"Błąd przetwarzania zdjęcia: {e}")
-        return None
+# --- STYL CSS ---
+CUSTOM_CSS = """
+<style>
+    [data-testid="stSidebar"] { display: none; }
+    [data-testid="stAppViewContainer"] {
+        background: rgb(0,0,0);
+        background: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(13,27,62,1) 100%);
+        color: #e0e0e0;
+    }
+    .admission-title {
+        text-align: center;
+        font-size: 2.2em;
+        font-weight: 700;
+        color: #ecf0f1;
+        margin-bottom: 20px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] > div {
+        background-color: rgba(13, 27, 62, 0.6);
+        border: 1px solid #2c3e50;
+        border-radius: 10px;
+        padding: 20px;
+    }
+    .stButton > button[kind="primary"] {
+        background-color: #3498db !important;
+        border-color: #3498db !important;
+        color: white !important;
+        font-weight: bold;
+        padding: 10px 30px;
+    }
+    .stButton > button[kind="secondary"] {
+        background-color: rgba(255,255,255,0.1) !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        color: #e0e0e0 !important;
+    }
+</style>
+"""
 
 def render_admission():
-    # Przycisk Anuluj
-    if st.button("❌ Anuluj"): 
-        st.session_state.view_mode = "list"
-        st.rerun()
-        
-    st.header("📝 Przyjęcie nowego podopiecznego")
-    st.info("Zdjęcia są automatycznie zmniejszane, aby baza działała szybko.")
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-    # 1. Pobieranie słowników
+    # --- NAGŁÓWEK ---
+    c_back, c_title, c_void = st.columns([1, 6, 1])
+    with c_back:
+        if st.button("⬅️ Anuluj", help="Wróć do listy", type="secondary", use_container_width=False):
+            st.session_state.view_mode = "list"
+            st.rerun()
+    with c_title:
+        st.markdown("<div class='admission-title'>Nowe Przyjęcie</div>", unsafe_allow_html=True)
+
+    # --- SŁOWNIKI ---
+    try: gatunki = crud.pobierz_slownik("gatunek")
+    except: gatunki = ["Pies", "Kot"]
+
     try:
-        gatunki = crud.pobierz_slownik('gatunek')
-        statusy = crud.pobierz_slownik('status')
-    except Exception:
-        gatunki = ["Pies", "Kot", "Inne"]
-        statusy = ["Do Adopcji", "Kwarantanna"]
-    
-    # 2. Formularz
-    with st.form("adm_form"):
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            imie = st.text_input("Imię *")
-            gatunek = st.selectbox("Gatunek", gatunki)
-            plec = st.radio("Płeć", ["Samiec", "Samica", "Nieznana"], horizontal=True)
-            
-            st.markdown("---")
-            st.write("Ogłoszenia:")
-            olx = st.checkbox("Ogłoszenie OLX")
-            www = st.checkbox("Ogłoszenie WWW")
-            
-        with c2:
-            status = st.selectbox("Status", statusy)
-            # --- ZDJĘCIE ---
-            st.write("Zdjęcie profilowe:")
-            uploaded_file = st.file_uploader("Wybierz plik", type=['jpg', 'png', 'jpeg'])
+        statusy = crud.pobierz_slownik("status")
+        default_status_idx = 0
+        if "Kwarantanna" in statusy:
+            default_status_idx = statusy.index("Kwarantanna")
+    except: 
+        statusy = ["Kwarantanna", "Do adopcji", "W trakcie leczenia"]
+        default_status_idx = 0
 
-        st.markdown("---")
-        submitted = st.form_submit_button("💾 Zapisz i przejdź do karty", type="primary")
+    try:
+        df_osoby = crud.pobierz_wszystkie_osoby()
+        mapa_osob = {"- wybierz -": None}
+        if not df_osoby.empty:
+            for _, row in df_osoby.iterrows():
+                mapa_osob[row['Display']] = row['IDOsoba']
+        lista_osob = list(mapa_osob.keys())
+    except:
+        lista_osob = ["- błąd pobierania -"]
+        mapa_osob = {}
+
+    # --- FORMULARZ ---
+    with st.form("admission_form", clear_on_submit=False):
         
-        if submitted:
+        # 1. DANE PODSTAWOWE
+        st.markdown("##### 📄 Dane Podstawowe")
+        with st.container(border=True):
+            c1, c2 = st.columns(2)
+            with c1:
+                imie = st.text_input("Imię")
+                gatunek = st.selectbox("Gatunek", gatunki)
+                rasa = st.text_input("Rasa", placeholder="np. Mieszaniec, Owczarek...")
+                plec = st.selectbox("Płeć", ["Samiec", "Samica"])
+            with c2:
+                nr_chip = st.text_input("Nr Chip")
+                status = st.selectbox("Status początkowy", statusy, index=default_status_idx)
+                # Dwie daty obok siebie
+                cd1, cd2 = st.columns(2)
+                with cd1: data_przyjecia = st.date_input("Data przyjęcia", value=date.today())
+                with cd2: data_urodzenia = st.date_input("Data urodzenia (przybliżona)", value=None)
+
+        st.write("") 
+
+        # 2. LUDZIE I ORGANIZACJA
+        st.markdown("##### 👥 Ludzie i Organizacja")
+        with st.container(border=True):
+            c3, c4 = st.columns(2)
+            with c3:
+                sel_nadzor = st.selectbox("Nadzór (Wolontariusz)", lista_osob)
+                zrodlo = st.text_input("Źródło finansowania", placeholder="np. Miasto, Fundacja...")
+            with c4:
+                sel_opiekun = st.selectbox("Opiekun / Dom Tymczasowy", lista_osob)
+                # Checkboxy
+                st.write("Status ogłoszeń:")
+                co1, co2 = st.columns(2)
+                with co1: czy_olx = st.checkbox("Ogłoszenie OLX")
+                with co2: czy_www = st.checkbox("Ogłoszenie WWW")
+
+        st.write("") 
+        
+        # 3. OPIS I MEDIA (NOWA SEKCJA)
+        st.markdown("##### 📝 Opis i Media")
+        with st.container(border=True):
+            opis = st.text_area("Opis zwierzęcia / Charakter", height=100)
+            zdjecie = st.file_uploader("Zdjęcie profilowe", type=['jpg', 'png', 'jpeg'])
+
+        st.write("")
+
+        # 4. DANE MEDYCZNE (STARTOWE)
+        st.markdown("##### 💉 Dane Medyczne (Startowe)")
+        with st.container(border=True):
+            m1, m2 = st.columns(2)
+            with m1:
+                szczep_wsciek = st.date_input("Szczepienie Wścieklizna", value=None)
+                szczep_zakazne = st.date_input("Szczepienie Zakaźne", value=None)
+                odrobaczenie = st.date_input("Odrobaczanie", value=None)
+            
+            with m2:
+                kastracja = st.date_input("Kastracja / Sterylizacja", value=None)
+                kleszcze = st.date_input("Ochrona p/kleszczom (Ważne do)", value=None)
+
+        st.write("")
+        submit_btn = st.form_submit_button("💾 Zapisz i Utwórz Kartę", type="primary", use_container_width=True)
+
+        if submit_btn:
             if not imie:
                 st.error("Imię jest wymagane!")
             else:
-                # KROK 1: Tworzenie rekordu
-                id_nadzorcy = st.session_state.get('user_id_osoba')
-                new_id = crud.dodaj_nowe_zwierze(imie, gatunek, plec, status, id_nadzorca=id_nadzorcy)
-                
-                if new_id:
-                    # KROK 2: Checkboxy
-                    dane_dodatkowe = {}
-                    if olx: dane_dodatkowe['CzyOgloszenieOLX'] = True
-                    if www: dane_dodatkowe['CzyOgloszenieWWW'] = True
-                    
-                    if dane_dodatkowe:
-                        crud.aktualizuj_dane_podstawowe(new_id, dane_dodatkowe)
-                    
-                    # KROK 3: ZDJĘCIE Z KOMPRESJĄ
-                    if uploaded_file is not None:
-                        # Tu dzieje się magia optymalizacji!
-                        compressed_data = compress_image(uploaded_file)
-                        if compressed_data:
-                            crud.aktualizuj_zdjecie(new_id, compressed_data)
+                id_nadzor = mapa_osob.get(sel_nadzor)
+                id_opiekun = mapa_osob.get(sel_opiekun)
 
-                    st.success(f"Dodano zwierzaka: {imie} (ID: {new_id})")
-                    time.sleep(1)
+                # Przetwarzanie zdjęcia na bajty
+                zdjecie_blob = None
+                if zdjecie:
+                    zdjecie_blob = zdjecie.getvalue()
+
+                # Zapis do bazy (Zaktualizowana funkcja CRUD)
+                new_id = crud.dodaj_nowe_zwierze(
+                    imie=imie,
+                    gatunek=gatunek,
+                    rasa=rasa,
+                    plec=plec,
+                    status=status,
+                    id_nadzorca=id_nadzor,
+                    id_opiekun=id_opiekun,
+                    nr_chip=nr_chip,
+                    zrodlo=zrodlo,
+                    data_przyjecia=data_przyjecia,
+                    # Nowe pola:
+                    data_urodzenia=data_urodzenia,
+                    opis=opis,
+                    czy_olx=czy_olx,
+                    czy_www=czy_www,
+                    zdjecie_blob=zdjecie_blob
+                )
+
+                if new_id:
+                    # Aktualizacja medyczna
+                    med_updates = {}
+                    if szczep_wsciek: med_updates['SzczepienieWscieklizna'] = szczep_wsciek
+                    if szczep_zakazne: med_updates['SzczepienieZakazne'] = szczep_zakazne
+                    if odrobaczenie: med_updates['Odrobaczenie'] = odrobaczenie
+                    if kastracja: med_updates['DataKastracji'] = kastracja
+                    if kleszcze: med_updates['OchronaKleszczeDo'] = kleszcze
                     
+                    if med_updates:
+                        crud.aktualizuj_dane_podstawowe(new_id, med_updates)
+                    
+                    st.success(f"Zwierzę {imie} zostało przyjęte!")
                     st.session_state.active_animal_id = new_id
                     st.session_state.view_mode = "details"
                     st.rerun()

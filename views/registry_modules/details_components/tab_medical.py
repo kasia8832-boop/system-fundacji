@@ -1,52 +1,89 @@
 """
 KOMPONENT KARTY: ZAKŁADKA 'ZDROWIE'
 -----------------------------------
-Tabela z informacjami medycznymi.
-Wersja 2.0: Dodano obsługę ochrony przeciw kleszczom.
+Poprawka: Zmiana 'OpisMedyczny' -> 'OpisZdrowia'.
 """
 import streamlit as st
 import pandas as pd
 from datetime import date
 
 def render_tab(r):
-    # Logika wyświetlania kastracji
-    data_kast = r.get('DataKastracji')
-    if data_kast:
-        status_kast = f"Tak ({data_kast})"
-    else:
-        status_kast = "Nie / Brak danych"
+    # 1. SZCZEPIENIA
+    st.markdown("##### 🛡️ Szczepienia")
+    with st.container(border=True):
+        c1, c2 = st.columns(2)
+        
+        with c1:
+            wsciek = r.get('SzczepienieWscieklizna')
+            st.caption("Wścieklizna (Data ostatniego):")
+            if wsciek:
+                dni = (date.today() - wsciek).days
+                if dni > 365:
+                    st.markdown(f"🔴 **{wsciek}** (Nieważne!)")
+                else:
+                    st.markdown(f"🟢 **{wsciek}**")
+            else:
+                st.markdown("⚪ Brak danych")
 
-    # Przygotowanie danych do tabeli
-    med_data = {
-        "Rodzaj Profilaktyki": [
-            "Kastracja / Sterylizacja", 
-            "Szczepienie: Wścieklizna", 
-            "Szczepienie: Choroby Zakaźne", 
-            "Odrobaczenie",
-            "🛡️ Ochrona p/kleszczom (Ważna do)"  # <--- NOWE POLE
-        ],
-        "Ostatnia Data / Status": [
-            status_kast,
-            str(r.get('SzczepienieWscieklizna') or "Brak"),
-            str(r.get('SzczepienieZakazne') or "Brak"),
-            str(r.get('Odrobaczenie') or "Brak"),
-            str(r.get('OchronaKleszczeDo') or "Brak ochrony") # <--- NOWE POLE
-        ]
-    }
-    
-    # Wyświetlenie tabeli
-    st.dataframe(
-        pd.DataFrame(med_data), 
-        hide_index=True, 
-        use_container_width=True
-    )
-    
+        with c2:
+            zakazne = r.get('SzczepienieZakazne')
+            st.caption("Choroby zakaźne (Data ostatniego):")
+            if zakazne:
+                st.markdown(f"**{zakazne}**")
+            else:
+                st.markdown("⚪ Brak danych")
+
+    st.write("")
+
+    # 2. OCHRONA PRZECIW KLESZCZOM
+    st.markdown("##### 🕷️ Ochrona p/kleszczom")
+    with st.container(border=True):
+        kleszcze = r.get('OchronaKleszczeDo')
+        st.caption("Ważne do:")
+        if kleszcze:
+            if kleszcze < date.today():
+                st.markdown(f"🔴 **{kleszcze}** (Wygasło)")
+            else:
+                st.markdown(f"🟢 **{kleszcze}**")
+        else:
+            st.markdown("⚪ Brak danych")
+
+    st.write("")
+
+    # 3. ODROBACZANIE
+    st.markdown("##### 💊 Odrobaczanie")
+    with st.container(border=True):
+        # Używamy poprawnej nazwy pola
+        odrobaczanie = r.get('Odrobaczenie') 
+        st.caption("Data ostatniego zabiegu:")
+        if odrobaczanie:
+            st.markdown(f"**{odrobaczanie}**")
+        else:
+            st.markdown("⚪ Brak danych")
+
+    st.write("")
+
+    # 4. KASTRACJA / STERYLIZACJA
+    st.markdown("##### ✂️ Kastracja / Sterylizacja")
+    with st.container(border=True):
+        data_kast = r.get('DataKastracji')
+        st.caption("Data zabiegu:")
+        if data_kast:
+            st.success(f"✅ Wykonano: **{data_kast}**")
+        else:
+            st.markdown("⚪ Nie wykonano / Brak daty")
+
+    st.write("")
     st.divider()
+
+    # 5. DODATKOWY OPIS ZDROWIA (POPRAWIONE POLE)
+    st.markdown("##### 📝 Opis / Notatki Medyczne")
     
-    # Wyświetlenie uwag (W nowym CRUD pole nazywa się OpisZdrowia)
-    uwagi = r.get('OpisZdrowia')
-    if uwagi: 
-        st.markdown("#### 🩺 Opis Zdrowia / Uwagi Weterynarza")
-        st.error(uwagi)
+    # POPRAWKA NAZWY:
+    opis_med = r.get('OpisZdrowia') 
+    
+    if opis_med:
+        with st.container(border=True):
+            st.write(opis_med)
     else:
-        st.caption("Brak uwag o stanie zdrowia.")
+        st.caption("Brak szczegółowego opisu medycznego.")

@@ -1,119 +1,171 @@
 """
 KOMPONENT KARTY: ZAKŁADKA 'HISTORIA'
-Wersja 3.1: Fix przycisku szczegółów (obsługa IDHistoria).
+------------------------------------
+Poprawka: Wymuszenie typu int dla ID Historii (naprawa załączników).
+Dodano: Obsługa błędów przy wgrywaniu plików.
 """
 import streamlit as st
-import pandas as pd
-from datetime import date
-import time
 import crud
-from views.registry_modules.details_components import event_details
-from models import Uzytkownik 
+import pandas as pd
 
-@st.dialog("🚨 Usuwanie zdarzenia")
-def potwierdz_usuniecie_z_listy(id_historia):
-    st.write("Czy na pewno chcesz usunąć ten wpis?")
-    col_yes, col_no = st.columns(2)
-    with col_yes:
-        if st.button("Tak, usuń", type="primary", use_container_width=True):
-            ok, msg = crud.usun_wpis_historii(id_historia)
-            if ok:
-                st.success("Usunięto.")
-                time.sleep(0.5)
-                st.rerun()
-            else:
-                st.error(msg)
-    with col_no:
-        if st.button("Anuluj", use_container_width=True):
-            st.rerun()
+def skroc_tekst(tekst, limit=80):
+    if not isinstance(tekst, str):
+        return ""
+    if len(tekst) > limit:
+        return tekst[:limit] + "..."
+    return tekst
 
-def render_tab(id_zw):
-    # Inicjalizacja stanu aktywnego zdarzenia
-    if 'active_history_event_id' not in st.session_state:
-        st.session_state.active_history_event_id = None
+def render_tab(id_zwierze):
+    
+    # --- 1. DODAWANIE NOWEGO WPISU ---
+    with st.expander("➕ Dodaj nowe zdarzenie", expanded=False):
+        with st.form("nowy_wpis_form", clear_on_submit=True):
+            c_kat, c_plik = st.columns([1, 1])
+            
+            with c_kat:
+                try:
+                    kat_opcje = crud.pobierz_slownik("kategoria")
+                except:
+                    kat_opcje = ["Weterynaria", "Behawiorysta", "Administracja", "Inne"]
+                kategoria = st.selectbox("Kategoria", kat_opcje)
+            
+            with c_plik:
+                pliki = st.file_uploader("Załączniki (Zdjęcia, PDF)", accept_multiple_files=True)
 
-    # --- TRYB 1: SZCZEGÓŁY ZDARZENIA (Sub-view) ---
-    if st.session_state.active_history_event_id is not None:
-        # Jeśli wybrano konkretne zdarzenie, pokazujemy jego szczegóły
-        event_details.render_event_details(st.session_state.active_history_event_id)
+            opis = st.text_area("Opis zdarzenia", height=100)
+            submitted = st.form_submit_button("Zapisz wpis", type="primary")
+            
+            if submitted:
+                if not opis:
+                    st.error("Opis jest wymagany.")
+                else:
+                    # Fallback ID usera
+                    current_user_id = st.session_state.get('user_id', 1)
+                    
+                    # 1. Tworzymy wpis
+                    id_historia = crud.dodaj_wpis_historii(id_zwierze, current_user_id, kategoria, opis)
+                    
+                    if id_historia:
+                        # 2. Dodajemy załączniki (z obsługą błędów)
+                        sukces_pliki = 0
+                        if pliki:
+                            for p in pliki:
+                                ok, msg = crud.dodaj_zalacznik(id_historia, p)
+                                if ok:
+                                    sukces_pliki += 1
+                                else:
+                                    st.error(f"Błąd pliku {p.name}: {msg}")
+                        
+                        st.success(f"Dodano wpis. Załączników: {sukces_pliki}")
+                        st.rerun()
+                    else:
+                        st.error("Błąd zapisu do bazy.")
+
+    st.divider()
+
+    # --- 2. FILTRY I TABELA ---
+    df = crud.pobierz_historie(id_zwierze)
+    
+    if df.empty:
+        st.info("Brak wpisów w historii.")
         return
 
-    # --- TRYB 2: LISTA ZDARZEŃ (Main-view) ---
+    # PANEL FILTRÓW
+    c_filter_1, c_filter_2 = st.columns([1, 2])
+    with c_filter_1:
+        dostepne_kategorie = df['Kategoria'].unique().tolist()
+        wybrane_kategorie = st.multiselect("Filtruj kategorię", dostepne_kategorie, placeholder="Wszystkie")
+    with c_filter_2:
+        szukana_f = st.text_input("Szukaj w opisie", placeholder="Np. szczepienie...", label_visibility="visible")
+
+    # LOGIKA FILTROWANIA
+    df_filtered = df.copy()
+    if wybrane_kategorie:
+        df_filtered = df_filtered[df_filtered['Kategoria'].isin(wybrane_kategorie)]
+    if szukana_f:
+        df_filtered = df_filtered[df_filtered['Opis'].str.contains(szukana_f, case=False, na=False)]
+
+    st.caption(f"Wyświetlono: {len(df_filtered)} wpisów")
+
+    # Przygotowanie do wyświetlenia
+    df_display = df_filtered.copy()
+    df_display['Podgląd Opisu'] = df_display['Opis'].apply(lambda x: skroc_tekst(x, 90))
     
-    # 1. Dodawanie nowego wpisu
-    with st.expander("➕ Dodaj nowe zdarzenie", expanded=False):
-        with st.form("new_history_entry_advanced"):
-            c1, c2 = st.columns(2)
-            
-            # Pobieramy kategorie
-            try:
-                sl_kat = crud.pobierz_slownik("kategoria")
-            except:
-                sl_kat = []
-            if not sl_kat: sl_kat = ["Wizyta", "Zabieg", "Inne"]
-            
-            kt = c1.selectbox("Typ zdarzenia", sl_kat)
-            dt = c2.date_input("Data zdarzenia", date.today())
-            de = st.text_area("Opis zdarzenia")
-            pliki = st.file_uploader("Załączniki", accept_multiple_files=True)
+    column_cfg = {
+        "IDHistoria": None,
+        "Opis": None,
+        "Podgląd Opisu": st.column_config.TextColumn("Opis zdarzenia", width="large"),
+        "DataZdarzenia": st.column_config.DateColumn("Data", format="DD.MM.YYYY", width="small"),
+        "Kategoria": st.column_config.TextColumn("Kategoria", width="medium"),
+        "Autor": st.column_config.TextColumn("Autor", width="small"),
+    }
+    cols = ["DataZdarzenia", "Kategoria", "Podgląd Opisu", "Autor"]
 
-            if st.form_submit_button("Zapisz", type="primary"):
-                # Pobieramy ID zalogowanego usera
-                db = crud.get_db_session()
-                user = db.query(Uzytkownik).filter(Uzytkownik.LoginName == st.session_state.user_name).first()
-                my_id = user.IDUser if user else None
-                db.close()
+    # TABELA
+    event = st.dataframe(
+        df_display[cols],
+        column_config=column_cfg,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row"
+    )
 
-                if my_id:
-                    new_id = crud.dodaj_wpis_historii(id_zw, my_id, kt, de)
-                    if pliki and new_id:
-                        for f in pliki:
-                            crud.dodaj_zalacznik(new_id, f)
-                    st.success("Dodano wpis!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("Błąd: Nie rozpoznano zalogowanego użytkownika.")
-
-    # 2. Filtry
-    with st.expander("🔍 Filtry", expanded=False):
-        # Ponowne pobranie słownika dla filtrów
-        try:
-            opcje_kat = crud.pobierz_slownik("kategoria") or ["Wizyta", "Zabieg"]
-        except:
-            opcje_kat = ["Wizyta", "Zabieg"]
-            
-        f_kat = st.multiselect("Filtruj kategorię", opcje_kat)
-
-    # 3. Wyświetlanie listy
-    df = crud.pobierz_historie(id_zw)
-    
-    if not df.empty:
-        # Konwersja daty (SQLite zwraca string)
-        df['DataZdarzenia'] = pd.to_datetime(df['DataZdarzenia'])
+    # --- 3. SZCZEGÓŁY WPISU + ZAŁĄCZNIKI ---
+    if event.selection.rows:
+        idx = event.selection.rows[0]
         
-        if f_kat:
-            df = df[df['Kategoria'].isin(f_kat)]
+        # Pobieramy dane z wiersza
+        row = df_filtered.iloc[idx]
+        
+        # WAŻNE: Rzutowanie na int, żeby baza na pewno zrozumiała ID
+        try:
+            id_historia = int(row['IDHistoria'])
+        except:
+            id_historia = row['IDHistoria']
             
-        for _, row in df.iterrows():
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([2, 5, 2])
+        pelny_opis = row['Opis']
+        data_zd = row['DataZdarzenia']
+        kategoria = row['Kategoria']
+        autor = row['Autor']
+        
+        st.write("")
+        st.markdown("---")
+        st.markdown(f"#### 🔎 Szczegóły wpisu z dnia {data_zd}")
+        
+        with st.container(border=True):
+            c1, c2 = st.columns([1, 4])
+            with c1:
+                st.caption("Kategoria / Autor")
+                st.markdown(f"**{kategoria}**")
+                st.markdown(f"👤 {autor}")
+            with c2:
+                st.caption("Pełna treść:")
+                st.write(pelny_opis)
+            
+            # --- ZAŁĄCZNIKI ---
+            st.divider()
+            
+            # Pobieramy listę załączników (używając pewnego INT id)
+            pliki_df = crud.pobierz_liste_zalacznikow(id_historia)
+            
+            if not pliki_df.empty:
+                st.markdown(f"**📎 Załączniki ({len(pliki_df)}):**")
                 
-                # Kolumna 1: Data i Typ
-                c1.write(f"**{row['DataZdarzenia'].strftime('%Y-%m-%d')}**")
-                c1.caption(row['Kategoria'])
-                
-                # Kolumna 2: Opis i Autor
-                c2.write(row['Opis'])
-                c2.caption(f"Autor: {row.get('Autor', 'System')}")
-                
-                # Kolumna 3: Przyciski
-                with c3:
-                    # Teraz mamy pewność, że IDHistoria jest w row, bo poprawiliśmy crud.py
-                    id_hist = row['IDHistoria']
+                cols_files = st.columns(3)
+                for index, file_row in pliki_df.iterrows():
+                    wynik = crud.pobierz_plik_content(file_row['ID_Zalacznik'])
                     
-                    if st.button("Szczegóły / Pliki", key=f"btn_hist_{id_hist}", use_container_width=True):
-                        st.session_state.active_history_event_id = int(id_hist)
-                        st.rerun()
-    else:
-        st.info("Brak wpisów w historii.")
+                    if wynik:
+                        nazwa, content, typ = wynik
+                        with cols_files[index % 3]:
+                            st.download_button(
+                                label=f"⬇️ {nazwa}",
+                                data=content,
+                                file_name=nazwa,
+                                mime=typ,
+                                key=f"dl_{file_row['ID_Zalacznik']}", # Unikalny klucz
+                                use_container_width=True
+                            )
+            else:
+                st.caption("Brak załączników dla tego wpisu.")

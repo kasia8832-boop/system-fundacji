@@ -1,134 +1,237 @@
 """
-MODUŁ REJESTRU: EDYCJA DANYCH
------------------------------
-Formularz edycji danych zwierzęcia.
-Wersja 3.1: Dodano możliwość zmiany ZDJĘCIA PROFILOWEGO (z kompresją).
+MODUŁ REJESTRU: EDYCJA
+----------------------
+Wersja 4.0: Przycisk Zapisz na górze, błękitny motyw zakładek, wyśrodkowany tytuł.
+"""
+import streamlit as st
+import crud
+from datetime import date
+
+# --- STYL CSS ---
+CUSTOM_CSS = """
+<style>
+    /* Ukrycie Sidebara */
+    [data-testid="stSidebar"] { display: none; }
+
+    /* Tło Gradientowe */
+    [data-testid="stAppViewContainer"] {
+        background: rgb(0,0,0);
+        background: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(13,27,62,1) 100%);
+        color: #e0e0e0;
+    }
+
+    /* Nagłówek - wyśrodkowany */
+    .edit-header {
+        text-align: center;
+        font-size: 2.5em;
+        font-weight: 800;
+        color: #ecf0f1;
+        margin-bottom: 5px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    /* Kontenery formularza */
+    [data-testid="stVerticalBlockBorderWrapper"] > div {
+        background-color: rgba(13, 27, 62, 0.6);
+        border: 1px solid #2c3e50;
+        border-radius: 10px;
+        padding: 20px;
+    }
+    
+    /* Zakładki - Styl Błękitny (Nocne Niebo) */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: rgba(255,255,255,0.05);
+        border-radius: 5px;
+        color: #bdc3c7;
+        padding: 5px 20px;
+    }
+    /* Aktywna zakładka - BŁĘKIT */
+    .stTabs [aria-selected="true"] {
+        background-color: #3498db !important;
+        color: white !important;
+        font-weight: bold;
+    }
+    
+    /* Przyciski */
+    .stButton > button[kind="primary"] {
+        background-color: #3498db !important; /* Błękitny */
+        border-color: #3498db !important;
+        color: white !important;
+        font-weight: bold;
+    }
+    .stButton > button[kind="secondary"] {
+        background-color: rgba(255,255,255,0.1) !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        color: #e0e0e0 !important;
+    }
+</style>
 """
 
-import streamlit as st
-import time
-import crud
-import io
-from datetime import date
-from PIL import Image
-
-# Funkcja do kompresji (ta sama co w admission.py)
-def compress_image(uploaded_file):
-    if uploaded_file is None: return None
-    try:
-        image = Image.open(uploaded_file)
-        if image.mode in ("RGBA", "P"): image = image.convert("RGB")
-        image.thumbnail((800, 800)) 
-        output_buffer = io.BytesIO()
-        image.save(output_buffer, format="JPEG", quality=70)
-        return output_buffer.getvalue()
-    except Exception as e:
-        st.error(f"Błąd zdjęcia: {e}")
-        return None
-
 def render_edit():
-    # Przycisk Anuluj
-    if st.button("❌ Anuluj"): 
-        st.session_state.view_mode = "details"
-        st.rerun()
-        
-    st.header("✏️ Edycja Profilu")
-    
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+    # 1. Weryfikacja ID
     try:
         id_zw = int(st.session_state.active_animal_id)
     except:
-        st.error("Brak ID zwierzęcia")
+        st.error("Błąd ID.")
+        if st.button("Wróć"):
+            st.session_state.view_mode = "list"
+            st.rerun()
         st.stop()
-    
+
+    # 2. Pobranie danych
     zwierze = crud.pobierz_szczegoly_zwierzecia(id_zw)
-    if zwierze is None:
-        st.error("Błąd danych.")
+    if not zwierze:
+        st.error("Nie znaleziono zwierzęcia.")
         return
 
-    # Słowniki
+    # 3. Słowniki
+    try: gatunki = crud.pobierz_slownik("gatunek")
+    except: gatunki = ["Pies", "Kot"]
+
+    try: statusy = crud.pobierz_slownik("status")
+    except: statusy = ["Do adopcji", "Kwarantanna", "Adoptowany"]
+
     try:
-        sl_gat = crud.pobierz_slownik("gatunek")
-        sl_stat = crud.pobierz_slownik("status")
+        df_osoby = crud.pobierz_wszystkie_osoby()
+        mapa_osob = {row['IDOsoba']: f"{row['Imie']} {row['Nazwisko']}" for _, row in df_osoby.iterrows()}
+        opcje_osob_ids = [None] + list(mapa_osob.keys())
     except:
-        sl_gat = ["Pies", "Kot"]
-        sl_stat = ["Do Adopcji"]
+        mapa_osob = {}
+        opcje_osob_ids = [None]
 
-    # Zakładki edycji
-    tab_main, tab_med = st.tabs(["📋 Dane Podstawowe", "🏥 Dane Medyczne"])
-    
-    with st.form("ed_form"):
-        # --- ZAKŁADKA 1: PODSTAWOWE ---
-        with tab_main:
-            c1, c2 = st.columns(2)
-            with c1:
-                ni = st.text_input("Imię", value=zwierze.Imie or "")
-                
-                obecny_gat = zwierze.Gatunek or sl_gat[0]
-                idx_gat = sl_gat.index(obecny_gat) if obecny_gat in sl_gat else 0
-                ng = st.selectbox("Gatunek", sl_gat, index=idx_gat)
-                
-                nr = st.text_input("Rasa", value=zwierze.Rasa or "")
-                dp = st.date_input("Data Przyjęcia", value=zwierze.DataPrzyjecia or date.today())
+    def format_func_osoba(id_os):
+        if id_os is None: return "- brak / nie wybrano -"
+        return mapa_osob.get(id_os, f"ID: {id_os}")
 
-            with c2:
-                opcje_plec = ["Samiec", "Samica", "Nieznana"]
-                obecna_plec = zwierze.Plec or "Nieznana"
-                idx_plec = opcje_plec.index(obecna_plec) if obecna_plec in opcje_plec else 2
-                np_val = st.radio("Płeć", opcje_plec, index=idx_plec, horizontal=True)
-
-                nc = st.text_input("Nr Chip", value=zwierze.NrChip or "")
-                du = st.date_input("Data Urodzenia", value=zwierze.DataUrodzenia or None)
-                
-                obecny_stat = zwierze.StatusZwierzecia or sl_stat[0]
-                idx_stat = sl_stat.index(obecny_stat) if obecny_stat in sl_stat else 0
-                ns = st.selectbox("Status", sl_stat, index=idx_stat)
-                
-                st.markdown("---")
-                olx = st.checkbox("OLX", value=bool(zwierze.CzyOgloszenieOLX))
-                www = st.checkbox("WWW", value=bool(zwierze.CzyOgloszenieWWW))
-
-            no = st.text_area("Opis ogólny", value=zwierze.Opis or "")
-
-            # --- NOWOŚĆ: ZMIANA ZDJĘCIA W EDYCJI ---
-            st.markdown("### 📷 Zmień zdjęcie profilowe")
-            new_photo = st.file_uploader("Wgraj nowe zdjęcie (zastąpi obecne)", type=['jpg', 'png', 'jpeg'])
-
-        # --- ZAKŁADKA 2: MEDYCZNE ---
-        with tab_med:
-            st.info("Daty ważności zabiegów")
-            cm1, cm2 = st.columns(2)
-            with cm1:
-                w = st.date_input("Wścieklizna", value=zwierze.SzczepienieWscieklizna or None)
-                z = st.date_input("Zakaźne", value=zwierze.SzczepienieZakazne or None)
-            with cm2:
-                o = st.date_input("Odrobaczenie", value=zwierze.Odrobaczenie or None)
-                kl = st.date_input("🛡️ Kleszcze (Ważne do)", value=zwierze.OchronaKleszczeDo or None)
-
-            st.divider()
-            dk = st.date_input("Data Kastracji", value=zwierze.DataKastracji or None)
-            u = st.text_area("Opis Zdrowia", value=zwierze.OpisZdrowia or "")
+    # --- POCZĄTEK FORMULARZA (Obejmuje całą stronę, łącznie z nagłówkiem) ---
+    with st.form("edit_form", border=False):
         
-        # --- ZAPIS ---
-        if st.form_submit_button("💾 Zapisz Zmiany", type="primary"):
-            dane_do_zapisu = {
-                "Imie": ni, "Gatunek": ng, "Rasa": nr, "DataPrzyjecia": dp,
-                "Plec": np_val, "NrChip": nc, "DataUrodzenia": du, "StatusZwierzecia": ns,
-                "CzyOgloszenieOLX": olx, "CzyOgloszenieWWW": www, "Opis": no,
-                "SzczepienieWscieklizna": w, "SzczepienieZakazne": z,
-                "Odrobaczenie": o, "OchronaKleszczeDo": kl,
-                "DataKastracji": dk, "OpisZdrowia": u
-            }
-
-            if crud.aktualizuj_dane_podstawowe(id_zw, dane_do_zapisu):
-                # Aktualizacja zdjęcia (jeśli wgrano nowe)
-                if new_photo:
-                    compressed = compress_image(new_photo)
-                    if compressed:
-                        crud.aktualizuj_zdjecie(id_zw, compressed)
-
-                st.success("Zapisano!")
-                time.sleep(1)
+        # === GÓRNA BELKA (Anuluj | Tytuł | Zapisz) ===
+        # Układ: Mały przycisk | Duży tytuł na środku | Mały przycisk
+        c_back, c_title, c_save = st.columns([1, 6, 1.5], vertical_alignment="center")
+        
+        with c_back:
+            # Przycisk Anuluj (jako submit secondary)
+            if st.form_submit_button("⬅️ Anuluj", type="secondary", use_container_width=True):
                 st.session_state.view_mode = "details"
                 st.rerun()
-            else:
-                st.error("Błąd zapisu.")
+                
+        with c_title:
+            st.markdown(f"<div class='edit-header'>✏️ Edycja: {zwierze.Imie}</div>", unsafe_allow_html=True)
+            
+        with c_save:
+            # PRZYCISK ZAPISU (Błękitny, Primary) - TERAZ NA GÓRZE
+            is_saved = st.form_submit_button("💾 Zapisz", type="primary", use_container_width=True)
+
+        st.divider()
+
+        # === TREŚĆ FORMULARZA (Zakładki) ===
+        tab_base, tab_med = st.tabs(["📝 Dane Podstawowe", "🏥 Dane Medyczne"])
+        
+        # -- Zakładka 1: Dane Podstawowe --
+        with tab_base:
+            c1, c2 = st.columns(2)
+            with c1:
+                new_imie = st.text_input("Imię", value=zwierze.Imie)
+                new_gatunek = st.selectbox("Gatunek", gatunki, index=gatunki.index(zwierze.Gatunek) if zwierze.Gatunek in gatunki else 0)
+                new_rasa = st.text_input("Rasa", value=zwierze.Rasa or "")
+                plec_idx = 0
+                if zwierze.Plec == "Samica": plec_idx = 1
+                new_plec = st.radio("Płeć", ["Samiec", "Samica"], index=plec_idx, horizontal=True)
+
+            with c2:
+                new_chip = st.text_input("Nr Chip", value=zwierze.NrChip or "")
+                new_status = st.selectbox("Status", statusy, index=statusy.index(zwierze.StatusZwierzecia) if zwierze.StatusZwierzecia in statusy else 0)
+                new_data_ur = st.date_input("Data Urodzenia", value=zwierze.DataUrodzenia)
+                new_data_przyjecia = st.date_input("Data Przyjęcia", value=zwierze.DataPrzyjecia)
+
+            st.markdown("##### Ludzie i Organizacja")
+            with st.container(border=True):
+                col_ppl1, col_ppl2 = st.columns(2)
+                with col_ppl1:
+                    current_nadzor_idx = 0
+                    if zwierze.IDNadzor in opcje_osob_ids:
+                        current_nadzor_idx = opcje_osob_ids.index(zwierze.IDNadzor)
+                    new_nadzor = st.selectbox("Nadzór (Wolontariusz)", opcje_osob_ids, format_func=format_func_osoba, index=current_nadzor_idx)
+                    new_zrodlo = st.text_input("Źródło Finansowania", value=zwierze.ZrodloFinansowania or "")
+
+                with col_ppl2:
+                    current_opiekun_idx = 0
+                    if zwierze.IDOpiekun in opcje_osob_ids:
+                        current_opiekun_idx = opcje_osob_ids.index(zwierze.IDOpiekun)
+                    new_opiekun = st.selectbox("Opiekun / Dom Tymczasowy", opcje_osob_ids, format_func=format_func_osoba, index=current_opiekun_idx)
+            
+            st.write("")
+            c_check1, c_check2 = st.columns(2)
+            with c_check1:
+                new_olx = st.checkbox("Ogłoszenie OLX", value=bool(zwierze.CzyOgloszenieOLX))
+            with c_check2:
+                new_www = st.checkbox("Ogłoszenie WWW", value=bool(zwierze.CzyOgloszenieWWW))
+
+            st.markdown("##### 📝 Opis")
+            new_opis = st.text_area("Opis ogólny", value=zwierze.Opis or "", height=100)
+            
+            st.markdown("##### 📷 Zdjęcie profilowe")
+            uploaded_photo = st.file_uploader("Zmień zdjęcie (zastąpi obecne)", type=['png', 'jpg', 'jpeg'])
+
+        # -- Zakładka 2: Dane Medyczne --
+        with tab_med:
+            # Usunięto tekst "Poniżej możesz edytować..."
+            
+            m1, m2 = st.columns(2)
+            with m1:
+                new_wsciek = st.date_input("Szczepienie Wścieklizna", value=zwierze.SzczepienieWscieklizna)
+                new_zakazne = st.date_input("Szczepienie Zakaźne", value=zwierze.SzczepienieZakazne)
+                
+                val_odrob = getattr(zwierze, "Odrobaczenie", None)
+                new_odrob = st.date_input("Odrobaczanie", value=val_odrob)
+            
+            with m2:
+                new_kastracja = st.date_input("Kastracja / Sterylizacja", value=zwierze.DataKastracji)
+                new_kleszcze = st.date_input("Ochrona p/kleszczom (Ważne do)", value=zwierze.OchronaKleszczeDo)
+
+            st.write("")
+            val_opis_zdrowia = getattr(zwierze, "OpisZdrowia", "")
+            new_opis_med = st.text_area("Opis / Notatki Medyczne", value=val_opis_zdrowia or "", height=150)
+
+    # --- LOGIKA ZAPISU (Wykonuje się po kliknięciu "Zapisz" na górze) ---
+    if is_saved:
+        dane_update = {
+            "Imie": new_imie,
+            "Gatunek": new_gatunek,
+            "Rasa": new_rasa,
+            "Plec": new_plec,
+            "NrChip": new_chip,
+            "StatusZwierzecia": new_status,
+            "DataUrodzenia": new_data_ur,
+            "DataPrzyjecia": new_data_przyjecia,
+            "CzyOgloszenieOLX": new_olx,
+            "CzyOgloszenieWWW": new_www,
+            "Opis": new_opis,
+            "IDNadzor": new_nadzor,
+            "IDOpiekun": new_opiekun,
+            "ZrodloFinansowania": new_zrodlo,
+            "SzczepienieWscieklizna": new_wsciek,
+            "SzczepienieZakazne": new_zakazne,
+            "Odrobaczenie": new_odrob,
+            "DataKastracji": new_kastracja,
+            "OchronaKleszczeDo": new_kleszcze,
+            "OpisZdrowia": new_opis_med 
+        }
+
+        if uploaded_photo:
+            bytes_data = uploaded_photo.getvalue()
+            crud.aktualizuj_zdjecie(id_zw, bytes_data)
+
+        sukces = crud.aktualizuj_dane_podstawowe(id_zw, dane_update)
+        
+        if sukces:
+            st.success("Zapisano zmiany!")
+            st.session_state.view_mode = "details"
+            st.rerun()
+        else:
+            st.error("Wystąpił błąd podczas zapisu.")
