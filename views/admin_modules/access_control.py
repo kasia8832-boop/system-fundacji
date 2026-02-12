@@ -1,100 +1,128 @@
 """
 MODUŁ ADMINA: ZARZĄDZANIE DOSTĘPEM
 ----------------------------------
-Wersja 3.0: Nowy CRUD i rola 'Admin'.
+Poprawka: Usunięcie zbędnego tekstu informacyjnego.
 """
 import streamlit as st
 import crud
 import time
 
 def render_access_control():
-    # ZABEZPIECZENIE: Rola Admin
     if st.session_state.user_role != "Admin":
-        st.error("⛔ BRAK DOSTĘPU. Moduł tylko dla Administratora.")
-        st.stop()
+        st.error("Brak uprawnień.")
+        return
 
-    st.subheader("🔐 Zarządzanie Kontami Systemowymi")
+    try:
+        df_ludzie = crud.pobierz_wszystkie_osoby()
+        mapa_ludzi = {"- Nie powiązano -": None}
+        if not df_ludzie.empty:
+            for _, row in df_ludzie.iterrows():
+                label = f"{row['Imie']} {row['Nazwisko']} (ID: {row['IDOsoba']})"
+                mapa_ludzi[label] = row['IDOsoba']
+        lista_opcji_ludzi = list(mapa_ludzi.keys())
+    except:
+        lista_opcji_ludzi = ["- Błąd pobierania danych -"]
+        mapa_ludzi = {}
+
+    t1, t2 = st.tabs(["👥 Lista Kont", "➕ Utwórz Nowe Konto"])
     
-    tab_lista, tab_dodaj = st.tabs(["👥 Lista Kont", "➕ Utwórz Konto"])
-    
-    # --- ZAKŁADKA 1: LISTA ---
-    with tab_lista:
-        users = crud.pobierz_wszystkich_uzytkownikow() # Nowa funkcja
+    # --- TAB 1: LISTA ---
+    with t1:
+        users = crud.pobierz_wszystkich_uzytkownikow()
         
         if not users.empty:
             st.dataframe(
                 users,
                 column_config={
                     "LoginName": "Login",
-                    "Email": "E-mail",
-                    "Rola": "Uprawnienia",
                     "CzyAktywny": st.column_config.CheckboxColumn("Aktywny?", disabled=True),
-                    "IDUser": st.column_config.NumberColumn("ID", disabled=True)
+                    "ID_User": st.column_config.NumberColumn("ID", disabled=True) 
                 },
                 hide_index=True,
                 use_container_width=True
             )
             
-            st.divider()
-            st.subheader("⚡ Akcje na koncie")
+            st.write("")
+            st.markdown("##### ⚡ Panel Akcji")
             
-            lista_loginow = users['LoginName'].tolist()
-            wybrany_login = st.selectbox("Wybierz użytkownika", lista_loginow)
-            
-            if wybrany_login:
-                user_row = users[users['LoginName'] == wybrany_login].iloc[0]
-                user_id = int(user_row['IDUser'])
-                is_active = int(user_row['CzyAktywny'])
+            with st.container(border=True):
+                lista_loginow = users['LoginName'].tolist()
+                wybrany_login = st.selectbox("Wybierz użytkownika do edycji", lista_loginow)
                 
-                c1, c2, c3 = st.columns(3)
-                
-                with c1:
-                    btn_label = "🚫 Zablokuj" if is_active else "✅ Odblokuj"
-                    if st.button(btn_label, use_container_width=True):
-                        crud.zmien_status_uzytkownika(user_id, is_active)
-                        st.success(f"Zmieniono status dla {wybrany_login}")
-                        time.sleep(1)
-                        st.rerun()
-                        
-                with c2:
-                    new_pass_manual = st.text_input("Nowe hasło", type="password", key="reset_pass")
-                    if st.button("🔄 Zmień hasło", use_container_width=True):
-                        if new_pass_manual:
-                            crud.zmien_haslo_uzytkownika(wybrany_login, new_pass_manual)
-                            st.success("Hasło zostało zmienione.")
-                        else:
-                            st.warning("Wpisz najpierw nowe hasło.")
-                            
-                with c3:
-                    if st.button("🗑️ Usuń konto", type="primary", use_container_width=True):
-                        crud.usun_uzytkownika(user_id)
-                        st.warning(f"Usunięto konto: {wybrany_login}")
-                        time.sleep(1)
-                        st.rerun()
+                if wybrany_login:
+                    user_row = users[users['LoginName'] == wybrany_login].iloc[0]
+                    try: user_id = int(user_row['ID_User'])
+                    except: user_id = int(user_row.get('IDUser', 0))
+                    
+                    is_active = int(user_row['CzyAktywny'])
+                    
+                    st.subheader("🔐 Zmiana Hasła")
+                    c_pass_input, c_pass_btn = st.columns([3, 1], vertical_alignment="bottom")
+                    with c_pass_input:
+                        new_pass_manual = st.text_input("Wpisz nowe hasło", type="password", key="reset_pass", placeholder="Minimum 5 znaków...")
+                    with c_pass_btn:
+                        if st.button("🔄 Zmień hasło", use_container_width=True):
+                            if new_pass_manual:
+                                crud.zmien_haslo_uzytkownika(wybrany_login, new_pass_manual)
+                                st.success("Hasło zmienione.")
+                            else:
+                                st.warning("Podaj hasło.")
 
+                    st.divider()
+
+                    c_status, c_delete = st.columns(2)
+                    with c_status:
+                        st.markdown("**Status Konta**")
+                        st.caption(f"Obecnie: {'Aktywne' if is_active else 'Zablokowane'}")
+                        btn_label = "🚫 Zablokuj Konto" if is_active else "✅ Odblokuj Konto"
+                        if st.button(btn_label, use_container_width=True, type="secondary"):
+                            crud.zmien_status_uzytkownika(user_id, is_active)
+                            st.success("Status zmieniony.")
+                            time.sleep(0.5)
+                            st.rerun()     
+                    with c_delete:
+                        st.markdown("**Usunięcie Konta**")
+                        st.caption("Operacja nieodwracalna.")
+                        if st.button("🗑️ Usuń trwale", type="primary", use_container_width=True):
+                            crud.usun_uzytkownika(user_id)
+                            st.warning(f"Usunięto konto: {wybrany_login}")
+                            time.sleep(1)
+                            st.rerun()
         else:
-            st.info("Brak użytkowników w systemie.")
+            st.info("Brak użytkowników.")
             
-    # --- ZAKŁADKA 2: DODAWANIE ---
-    with tab_dodaj:
-        st.subheader("Tworzenie nowego użytkownika")
-        with st.form("new_user_form"):
-            c1, c2 = st.columns(2)
-            with c1:
-                new_login = st.text_input("Login (unikalny)")
-                new_email = st.text_input("E-mail")
-            with c2:
-                new_pass = st.text_input("Hasło startowe", type="password")
-                new_role = st.selectbox("Rola", ["Admin", "Pracownik", "Wolontariusz", "DT"])
+    # --- TAB 2: TWORZENIE ---
+    with t2:
+        with st.container(border=True):
+            st.subheader("Formularz Rejestracji")
+            # TU BYŁ NAPIS - TERAZ GO NIE MA
             
-            if st.form_submit_button("Utwórz konto"):
-                if new_login and new_pass:
-                    ok, msg = crud.create_user(new_login, new_email, new_pass, new_role)
-                    if ok:
-                        st.success(f"Utworzono: {new_login}")
-                        time.sleep(1)
-                        st.rerun()
+            with st.form("new_user_form", clear_on_submit=True):
+                wybrana_osoba_str = st.selectbox("Powiązana Osoba *", lista_opcji_ludzi)
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    new_login = st.text_input("Login *")
+                    new_email = st.text_input("E-mail")
+                with c2:
+                    new_pass = st.text_input("Hasło *", type="password")
+                    new_role = st.selectbox("Rola", ["Admin", "Pracownik", "Wolontariusz", "DT"])
+                
+                st.write("")
+                
+                if st.form_submit_button("➕ Utwórz konto", type="primary", use_container_width=True):
+                    if new_login and new_pass and wybrana_osoba_str:
+                        id_osoby_do_zapisu = mapa_ludzi.get(wybrana_osoba_str)
+                        
+                        if not id_osoby_do_zapisu:
+                            st.error("Musisz wybrać osobę z listy.")
+                        else:
+                            ok, msg = crud.create_user(new_login, new_email, new_pass, new_role, id_osoba=id_osoby_do_zapisu)
+                            if ok:
+                                st.success(f"Utworzono konto dla: {new_login}")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(msg)
                     else:
-                        st.error(msg)
-                else:
-                    st.warning("Login i hasło są wymagane.")
+                        st.warning("Wypełnij wymagane pola (Osoba, Login, Hasło).")

@@ -48,24 +48,31 @@ def verify_user(login_input, password_input):
     finally:
         db.close()
 
-def create_user(login, email, password, rola, id_osoba=None):
-    """Tworzy nowego użytkownika systemowego."""
+def create_user(login, email, password, role, id_osoba=None):
+    """
+    Tworzy nowego użytkownika.
+    Poprawka: Użycie poprawnej nazwy kolumny 'HasloHash' oraz 'IDOsoba'.
+    """
     db = get_db_session()
     try:
+        # Sprawdzamy czy login jest wolny
+        if db.query(Uzytkownik).filter(Uzytkownik.LoginName == login).first():
+            return False, "Login jest już zajęty."
+
         new_user = Uzytkownik(
             LoginName=login,
             Email=email,
-            HasloHash=hash_password(password),
-            Rola=rola,
-            IDOsoba=id_osoba,
-            CzyAktywny=True
+            HasloHash=password,  
+            Rola=role,
+            CzyAktywny=True,
+            IDOsoba=id_osoba  
         )
         db.add(new_user)
         db.commit()
-        return True, "Użytkownik utworzony."
+        return True, "Utworzono konto."
     except Exception as e:
         db.rollback()
-        return False, f"Błąd: {e}"
+        return False, f"Błąd bazy: {e}"
     finally:
         db.close()
 

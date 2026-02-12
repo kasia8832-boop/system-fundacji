@@ -1,57 +1,66 @@
 """
 MODUŁ ADMINA: DASHBOARD (PULPIT)
 --------------------------------
-Wersja 2.0: Poprawiono nazwę roli na 'Admin'.
+Styl: Kafelki nawigacyjne w układzie Grid.
+Usunięto nagłówek tekstowy.
 """
 import streamlit as st
 
 def render_dashboard():
     role = st.session_state.user_role
-    st.markdown("### 🎛️ Panel Zarządzania")
-    st.info("Wybierz obszar, którym chcesz zarządzać.")
     
-    # --- WIERSZ 1 (Dostęp i Osoby) ---
+    # Usunięto st.markdown("### 🎛️ Pulpit Sterowniczy") zgodnie z życzeniem
+    
+    # Układ 2x2 kafelków
     c1, c2 = st.columns(2)
     
+    # --- KAFELETEK 1: DOSTĘP ---
     with c1:
         with st.container(border=True):
             st.subheader("🔐 Dostęp i Konta")
-            st.caption("Zarządzanie użytkownikami systemu i hasłami.")
+            st.markdown("Zarządzanie użytkownikami, hasłami i blokadami kont.")
+            st.write("") # Odstęp
             
-            # --- POPRAWKA: Admin zamiast Administrator ---
             if role == "Admin":
-                if st.button("Zarządzaj Dostępem ➡️", use_container_width=True): 
+                if st.button("Zarządzaj Dostępem", use_container_width=True): 
                     st.session_state.admin_mode = "access"
                     st.rerun()
             else:
-                st.button("🔒 Brak uprawnień", disabled=True, use_container_width=True)
+                st.button("⛔ Brak uprawnień", disabled=True, use_container_width=True)
             
+    # --- KAFELETEK 2: BAZA OSÓB ---
     with c2:
         with st.container(border=True):
             st.subheader("👥 Baza Osób")
-            st.caption("Domy Tymczasowe, Adoptujący, Wolontariusze.")
+            st.markdown("Wspólna baza: Domy Tymczasowe, Adoptujący, Wolontariusze.")
+            st.write("")
             
-            if st.button("Zarządzaj Osobami ➡️", use_container_width=True): 
+            if st.button("Otwórz Bazę Osób", use_container_width=True): 
                 st.session_state.admin_mode = "users"
                 st.rerun()
             
-    # --- WIERSZ 2 (Słowniki i Powiadomienia) ---
+    st.write("") # Odstęp pionowy między rzędami
+    
     c3, c4 = st.columns(2)
     
+    # --- KAFELETEK 3: SŁOWNIKI ---
     with c3:
         with st.container(border=True):
-            st.subheader("📚 Słowniki Danych")
-            st.caption("Edycja gatunków, statusów i źródeł.")
+            st.subheader("📚 Słowniki")
+            st.markdown("Definicje: Gatunki, Statusy, Kategorie zdarzeń.")
+            st.write("")
             
-            if st.button("Edytuj Słowniki ➡️", use_container_width=True): 
+            if st.button("Edytuj Słowniki", use_container_width=True): 
                 st.session_state.admin_mode = "dictionaries"
                 st.rerun()
 
+    # --- KAFELETEK 4: POWIADOMIENIA ---
     with c4:
         with st.container(border=True):
-            st.subheader("🔔 Powiadomienia")
-            st.caption("Konfiguracja terminów szczepień i alertów.")
+            st.subheader("🔔 Alerty")
+            st.markdown("Konfiguracja terminów ważności szczepień i badań.")
+            st.write("")
             
-            if st.button("Konfiguruj Alerty ➡️", use_container_width=True): 
+            if st.button("Konfiguruj Alerty", use_container_width=True): 
                 st.session_state.admin_mode = "alerts"
                 st.rerun()
