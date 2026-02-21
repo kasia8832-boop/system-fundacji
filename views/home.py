@@ -190,9 +190,9 @@ def render_home():
 
     # === PRAWA STRONA (SAMODZIELNIE DOPASOWUJE SIĘ DO DOŁU) ===
     with col_quick:
-        # Usunięto pętlę "for i in range(6)..." - vertical_alignment załatwia sprawę!
-        
         st.markdown("##### ⚡ Szybkie Akcje")
+        
+        # Akcja 1: Nowy pies
         with st.container(border=True):
             st.write("**Nowy pies?**")
             st.caption("Utwórz nową kartę.")
@@ -200,44 +200,55 @@ def render_home():
                 st.session_state.current_module = "registry"
                 st.session_state.view_mode = "admission"
                 st.rerun()
+                
+        # Akcja 2: Raporty (NOWE!)
+        with st.container(border=True):
+            st.write("**Analityka**")
+            st.caption("Przeglądaj raporty i statystyki.")
+            if st.button("📊 Raporty", type="secondary", use_container_width=True):
+                st.session_state.current_module = "reports" # Kierujemy do nowego modułu
+                st.rerun()
         
         if liczba > 0:
              st.markdown(f"<div style='text-align:center; color:#e74c3c; font-size:12px; margin-top:5px;'>⚠️ Zaległości: {liczba}</div>", unsafe_allow_html=True)
-
+    
     # --- 4. STATYSTYKI ---
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.divider()
     
+    # Pobieranie "żywych" danych z bazy!
+    stats = crud.get_dashboard_stats()
+    
     c_s1, c_s2, c_s3, c_s4 = st.columns(4)
 
     with c_s1:
-        st.markdown("""
+        st.markdown(f"""
         <div class='stat-card-dark blue-b'>
-            <div class='stat-val'>14</div>
-            <div class='stat-label'>Wszystkie Zwierzęta</div>
+            <div class='stat-val'>{stats['w_fundacji']}</div>
+            <div class='stat-label'>Zwierzęta w fundacji</div>
         </div>
         """, unsafe_allow_html=True)
 
     with c_s2:
-        st.markdown("""
+        st.markdown(f"""
         <div class='stat-card-dark green-b'>
-            <div class='stat-val'>5</div>
+            <div class='stat-val'>{stats['aktywni_wolo']}</div>
             <div class='stat-label'>Aktywni Wolontariusze</div>
         </div>
         """, unsafe_allow_html=True)
 
     with c_s3:
-        st.markdown("""
+        st.markdown(f"""
         <div class='stat-card-dark purple-b'>
-            <div class='stat-val'>2</div>
+            <div class='stat-val'>{stats['aktywne_dt']}</div>
             <div class='stat-label'>Aktywne DT</div>
         </div>
         """, unsafe_allow_html=True)
 
     with c_s4:
-        st.markdown("""
+        st.markdown(f"""
         <div class='stat-card-dark orange-b'>
-            <div class='stat-val'>3</div>
+            <div class='stat-val'>{stats['adopcje_miesiac']}</div>
             <div class='stat-label'>Adopcje (Miesiąc)</div>
         </div>
         """, unsafe_allow_html=True)

@@ -6,8 +6,8 @@ Odpowiada za logikę biznesową i komunikację z bazą danych.
 """
 import pandas as pd
 import hashlib
-from datetime import date, datetime
-from sqlalchemy import text
+from datetime import date, datetime, timedelta
+from sqlalchemy import text, func
 from database import SessionLocal
 from models import (
     Uzytkownik, Osoba, Zwierze, HistoriaZdarzen, Zalacznik,
@@ -167,7 +167,6 @@ def dodaj_nowe_zwierze(imie, gatunek, rasa, plec, status, id_nadzorca=None, id_o
             NrChip=nr_chip,
             ZrodloFinansowania=zrodlo,
             DataPrzyjecia=data_przyjecia,
-            # Nowe pola:
             DataUrodzenia=data_urodzenia,
             Opis=opis,
             CzyOgloszenieOLX=czy_olx,
@@ -591,5 +590,55 @@ def zapisz_konfiguracje_alertow(edited_df):
         db.rollback()
         print(f"Błąd zapisu alertów: {e}")
         return False
+    finally:
+        db.close()
+
+# ==============================================================================
+# 📈 10. STATYSTYKI DASHBOARDU
+# ==============================================================================
+
+def get_dashboard_stats():
+    """
+    Pobiera zagregowane statystyki do wyświetlenia na Dashboardzie.
+    Zwraca słownik z policzonymi wartościami.
+    """
+    db = get_db_session()
+    try:
+        today = date.today()
+        thirty_days_ago = today - timedelta(days=30)
+
+        # 1. Zwierzęta w fundacji (wykluczamy Adoptowane i Za Tęczowym Mostem)
+        w_fundacji = db.query(Zwierze).filter(
+            Zwierze.StatusZwierzecia.notin_(['Adoptowany', 'Za Tęczowym Mostem'])
+        ).count()
+
+        # 2. Aktywni wolontariusze
+        aktywni_wolo = db.query(Uzytkownik).filter(
+            Uzytkownik.Rola == 'Wolontariusz',
+            Uzytkownik.CzyAktywny == True
+        ).count()
+
+        # 3. Aktywne domy tymczasowe (unikalna liczba osób będących opiekunami zwierząt w DT)
+        aktywne_dt = db.query(func.count(func.distinct(Zwierze.IDOpiekun))).filter(
+            Zwierze.StatusZwierzecia == 'Dom Tymczasowy'
+        ).scalar() or 0
+
+        # 4. Adopcje w ostatnim miesiącu (Zdarzenia z kategorii 'Adopcja')
+        adopcje_miesiac = db.query(HistoriaZdarzen).filter(
+            HistoriaZdarzen.Kategoria == 'Adopcja',
+            HistoriaZdarzen.DataZdarzenia >= thirty_days_ago
+        ).count()
+
+        return {
+            "w_fundacji": w_fundacji,
+            "aktywni_wolo": aktywni_wolo,
+            "aktywne_dt": aktywne_dt,
+            "adopcje_miesiac": adopcje_miesiac
+        }
+    except Exception as e:
+        print(f"Błąd pobierania statystyk: {e}")
+        return {
+            "w_fundacji": 0, "aktywni_wolo": 0, "aktywne_dt": 0, "adopcje_miesiac": 0
+        }
     finally:
         db.close()
