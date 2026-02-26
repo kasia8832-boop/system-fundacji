@@ -5,6 +5,7 @@ Wersja ostateczna v3: Celowanie w [data-testid="stFormSubmitButton"] aby zabić 
 """
 import streamlit as st
 from views.admin_modules import dashboard, access_control, people_db, dictionaries, alerts_config
+from views import reports
 
 # --- GLOBALNY STYL (NOCNE NIEBO) ---
 CUSTOM_CSS = """
@@ -100,7 +101,8 @@ def render_admin():
         "access": "Dostęp i Konta",
         "users": "Baza Osób",
         "dictionaries": "Słowniki Danych",
-        "alerts": "Konfiguracja Alertów"
+        "alerts": "Konfiguracja Alertów",
+        "reports": "Raporty Analityczne" # <--- Dodana linijka
     }
     aktualny_tytul = tytuly_modulow.get(mode, "Panel Administracyjny")
 
@@ -269,4 +271,5 @@ def render_admin():
     elif mode == "users": people_db.render_people_db()
     elif mode == "dictionaries": dictionaries.render_dictionaries()
     elif mode == "alerts": alerts_config.render_alerts_config()
+    elif mode == "reports": reports.render_reports() # <--- Dodana linijka
     else: st.warning(f"Nieznany tryb: {mode}")

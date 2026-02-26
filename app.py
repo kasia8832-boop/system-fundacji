@@ -10,7 +10,7 @@ import styles
 from services import maintenance
 
 # Importujemy widoki (w tym notifications)
-from views import login, home, registry, admin, notifications
+from views import login, home, registry, admin, notifications, reports
 
 # --- KONFIGURACJA STARTOWA ---
 warnings.filterwarnings('ignore') 
@@ -61,14 +61,13 @@ def main():
         admin.render_admin()
 
     elif module == "notifications":
-        # Tutaj wywołujemy funkcję z zaimportowanego pliku, a nie definujemy jej tutaj!
         notifications.render_notifications()
+        
+    elif module == "reports":
+        reports.render_reports()
         
     else:
         st.error(f"Nieznany moduł: {module}")
-        if st.button("Reset"):
-            st.session_state.current_module = "home"
-            st.rerun()
-
+        
 if __name__ == "__main__":
     main()

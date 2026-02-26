@@ -188,7 +188,7 @@ def render_home():
                     st.session_state.admin_mode = "dashboard"
                     st.rerun()
 
-    # === PRAWA STRONA (SAMODZIELNIE DOPASOWUJE SIĘ DO DOŁU) ===
+   # === PRAWA STRONA (SAMODZIELNIE DOPASOWUJE SIĘ DO DOŁU) ===
     with col_quick:
         st.markdown("##### ⚡ Szybkie Akcje")
         
@@ -201,17 +201,17 @@ def render_home():
                 st.session_state.view_mode = "admission"
                 st.rerun()
                 
-        # Akcja 2: Raporty (NOWE!)
+        # Akcja 2: Raporty (NOWOŚĆ)
         with st.container(border=True):
             st.write("**Analityka**")
-            st.caption("Przeglądaj raporty i statystyki.")
+            st.caption("Wykresy i statystyki.")
             if st.button("📊 Raporty", type="secondary", use_container_width=True):
-                st.session_state.current_module = "reports" # Kierujemy do nowego modułu
+                st.session_state.current_module = "reports"
                 st.rerun()
         
         if liczba > 0:
              st.markdown(f"<div style='text-align:center; color:#e74c3c; font-size:12px; margin-top:5px;'>⚠️ Zaległości: {liczba}</div>", unsafe_allow_html=True)
-    
+             
     # --- 4. STATYSTYKI ---
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.divider()
