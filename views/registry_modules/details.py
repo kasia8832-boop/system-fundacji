@@ -1,73 +1,47 @@
 """
 MODUŁ REJESTRU: SZCZEGÓŁY (LAYOUT)
 ----------------------------------
-Wersja 3.2: Większy tytuł, styl mikro-kart (Info Tiles) pod zdjęciem.
+Wersja 4.0: Czysty, jasny motyw. Usunięto konflikty z globalnym CSS.
 """
 import streamlit as st
 import crud
 from views.registry_modules.details_components import side_panel, top_bar, tab_info, tab_medical, tab_history
 
-# --- KONFIGURACJA STYLU (Gradient Nocny) ---
-CUSTOM_CSS = """
+# --- LOKALNE STYLE KOMPONENTÓW (TYLKO DLA WIDOKU SZCZEGÓŁÓW) ---
+# Globalne tło, przyciski i zakładki są teraz zarządzane przez styles.py!
+LOCAL_CSS = """
 <style>
-    /* 1. UKRYCIE SIDEBARA */
-    [data-testid="stSidebar"] { display: none; }
-
-    /* 2. TŁO APLIKACJI */
-    [data-testid="stAppViewContainer"] {
-        background: rgb(0,0,0);
-        background: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(13,27,62,1) 100%);
-        color: #e0e0e0;
-    }
-
-    /* 3. PRZYCISKI */
-    .stButton > button[kind="primary"] {
-        background-color: #3498db !important;
-        border-color: #3498db !important;
-        color: white !important;
-        font-weight: bold;
-        border-radius: 8px;
-    }
-    .stButton > button[kind="secondary"] {
-        background-color: rgba(255,255,255,0.1) !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
-        color: #e0e0e0 !important;
-        border-radius: 8px;
-        padding: 5px 15px;
-    }
-
-    /* 4. TYTUŁ ZWIERZĘCIA (JESZCZE WIĘKSZY) */
+    /* 1. TYTUŁ ZWIERZĘCIA */
     .animal-title {
         text-align: center;
         text-transform: uppercase;
-        font-size: 3.5em; /* Powiększono z 2.5em */
+        font-size: 3.5em; 
         font-weight: 900;
         letter-spacing: 3px;
-        background: -webkit-linear-gradient(45deg, #ecf0f1, #bdc3c7);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #3498db !important; /* Fundacyjny błękit */
         margin: 0; padding: 0;
         line-height: 1.1;
     }
 
-    /* 5. RAMKA ZDJĘCIA (Czarna, prosta) */
+    /* 2. RAMKA ZDJĘCIA (Jasna, nowoczesna) */
     .profile-photo {
-        border: 4px solid #080808;
-        border-radius: 4px; /* Mniejsze zaokrąglenie, bardziej pro */
+        border: 4px solid #ffffff;
+        border-radius: 8px; 
         padding: 0;
         margin-bottom: 15px;
         background-color: transparent;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08); /* Delikatny cień */
     }
     
-    /* 6. MIKRO-KARTY (INFO TILES) - NOWOŚĆ */
+    /* 3. MIKRO-KARTY (INFO TILES) - WERSJA JASNA */
     .info-tile {
-        background-color: rgba(255, 255, 255, 0.03);
-        border-left: 3px solid #3498db; /* Błękitny akcent */
-        border-radius: 4px;
-        padding: 8px 12px;
-        margin-bottom: 8px;
-        font-size: 14px;
+        background-color: #ffffff;
+        border-left: 4px solid #3498db; /* Błękitny akcent z lewej */
+        border-radius: 6px;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        border: 1px solid #f1f2f6;
     }
     .info-label {
         font-size: 11px;
@@ -77,28 +51,16 @@ CUSTOM_CSS = """
         margin-bottom: 2px;
     }
     .info-value {
-        font-size: 14px;
-        color: #ecf0f1;
-        font-weight: 500;
-    }
-
-    /* 7. ZAKŁADKI */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: rgba(255,255,255,0.05);
-        border-radius: 5px;
-        color: #bdc3c7;
-        padding: 5px 20px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #3498db !important;
-        color: white !important;
+        font-size: 15px;
+        color: #2c3e50;
+        font-weight: 600;
     }
 </style>
 """
 
 def render_details():
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    # Wstrzykujemy tylko lokalne style dla zdjęć i kafelków
+    st.markdown(LOCAL_CSS, unsafe_allow_html=True)
 
     # 1. Weryfikacja ID
     try:
@@ -114,7 +76,7 @@ def render_details():
         st.error("Nie znaleziono zwierzęcia.")
         return
     
-    # Konwersja na słownik
+    # Konwersja obiektu na słownik, aby pasował do komponentów
     r = {k: v for k, v in vars(zwierze_obj).items() if not k.startswith('_')}
     r['ID_Zwierze'] = zwierze_obj.IDZwierze 
 
@@ -127,6 +89,7 @@ def render_details():
         side_panel.render_side_panel(r)
 
     with col_right:
+        # Zakładki zostaną teraz automatycznie ostylowane przez globalny plik styles.py
         t1, t2, t3 = st.tabs(["📄 Dane", "💉 Zdrowie", "📜 Historia"])
         with t1: tab_info.render_tab(r)
         with t2: tab_medical.render_tab(r)

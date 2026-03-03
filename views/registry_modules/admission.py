@@ -1,53 +1,30 @@
 """
 MODUŁ REJESTRU: PRZYJĘCIE ZWIERZĘCIA
 ------------------------------------
-Wersja 2.0: Pełny zestaw pól (Data ur., Zdjęcie, Opis, Ogłoszenia).
+Wersja 3.0: Pełna zgodność z jasnym motywem. Usunięto stare bloki CSS.
 """
 import streamlit as st
 import crud
 from datetime import date
 
-# --- STYL CSS ---
-CUSTOM_CSS = """
+# --- STYL LOKALNY ---
+# Reszta (tło, inputy, przyciski) dziedziczy z globalnego styles.py
+LOCAL_CSS = """
 <style>
-    [data-testid="stSidebar"] { display: none; }
-    [data-testid="stAppViewContainer"] {
-        background: rgb(0,0,0);
-        background: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(13,27,62,1) 100%);
-        color: #e0e0e0;
-    }
     .admission-title {
         text-align: center;
         font-size: 2.2em;
-        font-weight: 700;
-        color: #ecf0f1;
+        font-weight: 800;
+        color: #3498db !important; /* Fundacyjny błękit */
         margin-bottom: 20px;
         text-transform: uppercase;
         letter-spacing: 2px;
-    }
-    [data-testid="stVerticalBlockBorderWrapper"] > div {
-        background-color: rgba(13, 27, 62, 0.6);
-        border: 1px solid #2c3e50;
-        border-radius: 10px;
-        padding: 20px;
-    }
-    .stButton > button[kind="primary"] {
-        background-color: #3498db !important;
-        border-color: #3498db !important;
-        color: white !important;
-        font-weight: bold;
-        padding: 10px 30px;
-    }
-    .stButton > button[kind="secondary"] {
-        background-color: rgba(255,255,255,0.1) !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
-        color: #e0e0e0 !important;
     }
 </style>
 """
 
 def render_admission():
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    st.markdown(LOCAL_CSS, unsafe_allow_html=True)
 
     # --- NAGŁÓWEK ---
     c_back, c_title, c_void = st.columns([1, 6, 1])
@@ -121,7 +98,7 @@ def render_admission():
 
         st.write("") 
         
-        # 3. OPIS I MEDIA (NOWA SEKCJA)
+        # 3. OPIS I MEDIA
         st.markdown("##### 📝 Opis i Media")
         with st.container(border=True):
             opis = st.text_area("Opis zwierzęcia / Charakter", height=100)
@@ -157,7 +134,7 @@ def render_admission():
                 if zdjecie:
                     zdjecie_blob = zdjecie.getvalue()
 
-                # Zapis do bazy (Zaktualizowana funkcja CRUD)
+                # Zapis do bazy
                 new_id = crud.dodaj_nowe_zwierze(
                     imie=imie,
                     gatunek=gatunek,
@@ -169,7 +146,6 @@ def render_admission():
                     nr_chip=nr_chip,
                     zrodlo=zrodlo,
                     data_przyjecia=data_przyjecia,
-                    # Nowe pola:
                     data_urodzenia=data_urodzenia,
                     opis=opis,
                     czy_olx=czy_olx,

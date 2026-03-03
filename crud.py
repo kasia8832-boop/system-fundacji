@@ -281,10 +281,13 @@ def pobierz_historie(id_zwierze):
 # ==============================================================================
 
 def pobierz_wszystkie_osoby():
-    """Zwraca DataFrame wszystkich osób."""
+    """Zwraca DataFrame wszystkich osób wraz ze szczegółami kontaktowymi."""
     db = get_db_session()
     try:
-        q = db.query(Osoba.IDOsoba, Osoba.Imie, Osoba.Nazwisko, Osoba.AdresMiasto)
+        # POBIERAMY TERAZ WSZYSTKIE KOLUMNY POTRZEBNE DO EDYCJI
+        q = db.query(Osoba.IDOsoba, Osoba.Imie, Osoba.Nazwisko, Osoba.Telefon, 
+                     Osoba.Email, Osoba.AdresMiasto, Osoba.AdresUlica, 
+                     Osoba.AdresNrLokalu, Osoba.AdresKodPocztowy)
         df = pd.read_sql(q.statement, db.bind)
         if not df.empty:
             df['Display'] = df['Imie'] + " " + df['Nazwisko'] + " (" + df['AdresMiasto'].fillna('-') + ")"
@@ -292,19 +295,66 @@ def pobierz_wszystkie_osoby():
     finally:
         db.close()
 
-def dodaj_osobe(imie, nazwisko, telefon, email, miasto, ulica, lokal, kod):
+def aktualizuj_osobe(id_osoba, imie, nazwisko, telefon, email, miasto, ulica, lokal, kod):
+    """Zapisuje zmienione dane Osoby w bazie."""
     db = get_db_session()
     try:
-        osoba = Osoba(
-            Imie=imie, Nazwisko=nazwisko, Telefon=telefon, Email=email,
-            AdresMiasto=miasto, AdresUlica=ulica, AdresNrLokalu=lokal, AdresKodPocztowy=kod
-        )
-        db.add(osoba)
+        osoba = db.query(Osoba).filter(Osoba.IDOsoba == id_osoba).first()
+        if not osoba:
+            return False, "Nie znaleziono osoby w bazie."
+        
+        osoba.Imie = imie
+        osoba.Nazwisko = nazwisko
+        osoba.Telefon = telefon
+        osoba.Email = email
+        osoba.AdresMiasto = miasto
+        osoba.AdresUlica = ulica
+        osoba.AdresNrLokalu = lokal
+        osoba.AdresKodPocztowy = kod
+        
         db.commit()
-        return True, "Osoba dodana"
+        return True, "Zaktualizowano dane osoby."
     except Exception as e:
         db.rollback()
-        return False, str(e)
+        return False, f"Błąd bazy: {e}"
+    finally:
+        db.close()
+
+def anonimizuj_osobe(id_osoba):
+    """
+    Zgodność z RODO: Prawo do bycia zapomnianym.
+    Nadpisuje dane wrażliwe Osoby i blokuje powiązane konto Użytkownika,
+    zachowując jednocześnie spójność relacji w bazie danych (np. adopcje).
+    """
+    db = get_db_session()
+    try:
+        # 1. Anonimizacja danych osobowych
+        osoba = db.query(Osoba).filter(Osoba.IDOsoba == id_osoba).first()
+        if not osoba:
+            return False, "Nie znaleziono osoby w bazie."
+        
+        osoba.Imie = "Anonim"
+        osoba.Nazwisko = "(RODO)"
+        osoba.Telefon = "-"
+        osoba.Email = "-"
+        osoba.AdresMiasto = "Zanonimizowano"
+        osoba.AdresUlica = "Zanonimizowano"
+        osoba.AdresNrLokalu = "-"
+        osoba.AdresKodPocztowy = "-"
+
+        # 2. Deaktywacja i anonimizacja powiązanego konta dostępowego
+        user = db.query(Uzytkownik).filter(Uzytkownik.IDOsoba == id_osoba).first()
+        if user:
+            user.LoginName = f"usuniety_rodo_{id_osoba}"
+            user.Email = "-"
+            user.CzyAktywny = False
+            user.HasloHash = "USUNIETO"
+
+        db.commit()
+        return True, "Dane zostały pomyślnie zanonimizowane."
+    except Exception as e:
+        db.rollback()
+        return False, f"Błąd bazy danych: {e}"
     finally:
         db.close()
 
@@ -344,55 +394,115 @@ def add_dict_value(typ, wartosc): dodaj_wartosc_slownika(typ, wartosc)
 # 🚨 7. POWIADOMIENIA I ALERTY
 # ==============================================================================
 
-def pobierz_alerty_medyczne():
-    """Generuje alerty medyczne."""
+def pobierz_alerty_medyczne(rola_usera="Admin", id_osoba=None):
+    """Generuje alerty medyczne i operacyjne. Wersja pancerna na konflikty typów dat."""
     db = get_db_session()
     alerty = []
     dzis = date.today()
     try:
         reguly = db.query(KonfiguracjaAlerty).filter(KonfiguracjaAlerty.CzyAktywny == True).all()
-        if not reguly: return []
 
-        zwierzeta = db.query(Zwierze).filter(
+        query = db.query(Zwierze).filter(
             Zwierze.StatusZwierzecia.notin_(['Adoptowany', 'Za Tęczowym Mostem'])
-        ).all()
+        )
+
+        if rola_usera != "Admin" and id_osoba is not None:
+            query = query.filter(Zwierze.IDNadzor == id_osoba)
+
+        zwierzeta = query.all()
 
         for zwierzak in zwierzeta:
-            for regula in reguly:
-                pole = regula.KodPola
-                limit_dni = regula.DniWaznosci
-                etykieta = regula.Etykieta
-                data_baza = getattr(zwierzak, pole, None)
+            try:
+                # --- PANCERNA OBSŁUGA DATY PRZYJĘCIA ---
+                data_przyj = zwierzak.DataPrzyjecia
+                if isinstance(data_przyj, datetime):
+                    data_przyj = data_przyj.date() # Obcinamy godziny jeśli to datetime
+                elif isinstance(data_przyj, str):
+                    data_przyj = datetime.strptime(data_przyj.split(' ')[0], '%Y-%m-%d').date()
                 
-                if not data_baza: continue
-
-                if pole == 'OchronaKleszczeDo':
-                    dni_po_terminie = (dzis - data_baza).days
-                    if dni_po_terminie > 0:
-                        alerty.append({
-                            "id": zwierzak.IDZwierze,
-                            "imie": zwierzak.Imie,
-                            "chip": zwierzak.NrChip,
-                            "typ": "Wygasła Ochrona",
-                            "komunikat": f"{etykieta}: wygasła {data_baza} ({dni_po_terminie} dni temu)",
-                            "DniPoTerminie": dni_po_terminie,
-                            "Rodzaj": etykieta
-                        })
+                if data_przyj:
+                    dni_w_fundacji = (dzis - data_przyj).days
                 else:
-                    dni_od_zabiegu = (dzis - data_baza).days
-                    if dni_od_zabiegu > limit_dni:
+                    dni_w_fundacji = 0
+
+                # ------------------------------------------------------------------
+                # A. ALERTY OPERACYJNE
+                # ------------------------------------------------------------------
+                if zwierzak.StatusZwierzecia == 'Kwarantanna' and dni_w_fundacji >= 14:
+                    alerty.append({
+                        "id": zwierzak.IDZwierze, "imie": zwierzak.Imie, "chip": zwierzak.NrChip,
+                        "komunikat": f"🟢 Koniec kwarantanny! Zwierzę jest w fundacji już {dni_w_fundacji} dni."
+                    })
+
+                if not zwierzak.NrChip and dni_w_fundacji >= 3:
+                    alerty.append({
+                        "id": zwierzak.IDZwierze, "imie": zwierzak.Imie, "chip": "BRAK",
+                        "komunikat": f"⚠️ Brak CHIP! Zwierzę przebywa w fundacji od {dni_w_fundacji} dni."
+                    })
+
+                if not zwierzak.IDNadzor:
+                    alerty.append({
+                        "id": zwierzak.IDZwierze, "imie": zwierzak.Imie, "chip": zwierzak.NrChip,
+                        "komunikat": f"🙋‍♀️ Brak Wolontariusza! Nikt nie sprawuje nadzoru nad tym zwierzęciem."
+                    })
+
+                # ------------------------------------------------------------------
+                # B. ALERTY MEDYCZNE
+                # ------------------------------------------------------------------
+                if not reguly: continue
+
+                for regula in reguly:
+                    pole = regula.KodPola
+                    limit_dni = int(regula.DniWaznosci) # Wymuszamy Integer
+                    etykieta = regula.Etykieta
+                    data_baza = getattr(zwierzak, pole, None)
+                    
+                    if not data_baza: 
                         alerty.append({
-                            "id": zwierzak.IDZwierze,
-                            "imie": zwierzak.Imie,
-                            "chip": zwierzak.NrChip,
-                            "typ": "Przeterminowane",
-                            "komunikat": f"{etykieta}: minęło {dni_od_zabiegu} dni (Limit: {limit_dni})",
-                            "DniPoTerminie": dni_od_zabiegu - limit_dni,
-                            "Rodzaj": etykieta
+                            "id": zwierzak.IDZwierze, "imie": zwierzak.Imie, "chip": zwierzak.NrChip,
+                            "komunikat": f"⚠️ {etykieta}: Brak jakiejkolwiek wpisanej daty!"
                         })
+                        continue 
+
+                    # --- PANCERNA OBSŁUGA DATY MEDYCZNEJ ---
+                    if isinstance(data_baza, datetime):
+                        data_baza = data_baza.date()
+                    elif isinstance(data_baza, str):
+                        data_baza = datetime.strptime(data_baza.split(' ')[0], '%Y-%m-%d').date()
+
+                    if pole == 'OchronaKleszczeDo':
+                        dni_do_konca = (data_baza - dzis).days
+                        if dni_do_konca < 0:
+                            alerty.append({
+                                "id": zwierzak.IDZwierze, "imie": zwierzak.Imie, "chip": zwierzak.NrChip,
+                                "komunikat": f"🔴 {etykieta}: Wygasła {abs(dni_do_konca)} dni temu! ({data_baza})"
+                            })
+                        elif dni_do_konca <= 14:
+                            alerty.append({
+                                "id": zwierzak.IDZwierze, "imie": zwierzak.Imie, "chip": zwierzak.NrChip,
+                                "komunikat": f"🟡 {etykieta}: Wygasa za {dni_do_konca} dni ({data_baza})."
+                            })
+                    else:
+                        data_waznosci = data_baza + timedelta(days=limit_dni)
+                        dni_do_konca = (data_waznosci - dzis).days
+
+                        if dni_do_konca < 0:
+                            alerty.append({
+                                "id": zwierzak.IDZwierze, "imie": zwierzak.Imie, "chip": zwierzak.NrChip,
+                                "komunikat": f"🔴 {etykieta}: Przeterminowane o {abs(dni_do_konca)} dni! (Ważne do {data_waznosci})"
+                            })
+                        elif dni_do_konca <= 14:
+                            alerty.append({
+                                "id": zwierzak.IDZwierze, "imie": zwierzak.Imie, "chip": zwierzak.NrChip,
+                                "komunikat": f"🟡 {etykieta}: Kończy się za {dni_do_konca} dni! (Ważne do {data_waznosci})"
+                            })
+            except Exception as e:
+                print(f"Błąd analizy alertów dla {zwierzak.IDZwierze}: {e}")
+                continue
+
         return alerty
     except Exception as e:
-        print(f"Błąd alertów: {e}")
+        print(f"Globalny błąd alertów: {e}")
         return []
     finally:
         db.close()
@@ -569,6 +679,18 @@ def usun_wartosc_slownika(typ_slownika, wartosc):
 def pobierz_konfiguracje_alertow():
     db = get_db_session()
     try:
+        # --- AUTO-SETUP BAZY DANYCH ---
+        if db.query(KonfiguracjaAlerty).count() == 0:
+            domyslne_reguly = [
+                KonfiguracjaAlerty(KodPola="SzczepienieWscieklizna", Etykieta="Wścieklizna", DniWaznosci=365, CzyAktywny=True),
+                KonfiguracjaAlerty(KodPola="SzczepienieZakazne", Etykieta="Choroby zakaźne", DniWaznosci=365, CzyAktywny=True),
+                KonfiguracjaAlerty(KodPola="Odrobaczenie", Etykieta="Odrobaczanie", DniWaznosci=90, CzyAktywny=True),
+                KonfiguracjaAlerty(KodPola="OchronaKleszczeDo", Etykieta="Ochrona na kleszcze", DniWaznosci=0, CzyAktywny=True)
+            ]
+            db.add_all(domyslne_reguly)
+            db.commit()
+        # ------------------------------
+        
         q = db.query(KonfiguracjaAlerty)
         df = pd.read_sql(q.statement, db.bind)
         return df
@@ -592,6 +714,7 @@ def zapisz_konfiguracje_alertow(edited_df):
         return False
     finally:
         db.close()
+
 
 # ==============================================================================
 # 📈 10. STATYSTYKI DASHBOARDU

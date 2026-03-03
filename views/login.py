@@ -21,7 +21,7 @@ def render_login():
     # Centrowanie formularza na ekranie
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        st.markdown("<h1 style='text-align: center;'>🔐 System Fundacji</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #3498db !important;'>🔐 System Fundacji</h1>", unsafe_allow_html=True)
         st.container(border=True)
         
         # Inicjalizacja trybu logowania, jeśli go nie ma

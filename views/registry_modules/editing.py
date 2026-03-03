@@ -1,76 +1,32 @@
 """
 MODUŁ REJESTRU: EDYCJA
 ----------------------
-Wersja 4.0: Przycisk Zapisz na górze, błękitny motyw zakładek, wyśrodkowany tytuł.
+Wersja 5.0: Pełna kompatybilność z jasnym motywem, czyszczenie starych CSS.
 """
 import streamlit as st
 import crud
 from datetime import date
 
-# --- STYL CSS ---
-CUSTOM_CSS = """
+# --- STYL LOKALNY ---
+# Zostawiamy tylko to, co odpowiada za unikalny wygląd nagłówka na tej stronie.
+# Reszta (tła, inputy, zakładki, przyciski) jest dziedziczona z globalnego styles.py.
+LOCAL_CSS = """
 <style>
-    /* Ukrycie Sidebara */
-    [data-testid="stSidebar"] { display: none; }
-
-    /* Tło Gradientowe */
-    [data-testid="stAppViewContainer"] {
-        background: rgb(0,0,0);
-        background: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(13,27,62,1) 100%);
-        color: #e0e0e0;
-    }
-
-    /* Nagłówek - wyśrodkowany */
+    /* Nagłówek - wyśrodkowany, dopasowany do jasnego motywu */
     .edit-header {
         text-align: center;
         font-size: 2.5em;
         font-weight: 800;
-        color: #ecf0f1;
+        color: #3498db !important; /* Fundacyjny błękit */
         margin-bottom: 5px;
         text-transform: uppercase;
         letter-spacing: 1px;
-    }
-
-    /* Kontenery formularza */
-    [data-testid="stVerticalBlockBorderWrapper"] > div {
-        background-color: rgba(13, 27, 62, 0.6);
-        border: 1px solid #2c3e50;
-        border-radius: 10px;
-        padding: 20px;
-    }
-    
-    /* Zakładki - Styl Błękitny (Nocne Niebo) */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: rgba(255,255,255,0.05);
-        border-radius: 5px;
-        color: #bdc3c7;
-        padding: 5px 20px;
-    }
-    /* Aktywna zakładka - BŁĘKIT */
-    .stTabs [aria-selected="true"] {
-        background-color: #3498db !important;
-        color: white !important;
-        font-weight: bold;
-    }
-    
-    /* Przyciski */
-    .stButton > button[kind="primary"] {
-        background-color: #3498db !important; /* Błękitny */
-        border-color: #3498db !important;
-        color: white !important;
-        font-weight: bold;
-    }
-    .stButton > button[kind="secondary"] {
-        background-color: rgba(255,255,255,0.1) !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
-        color: #e0e0e0 !important;
     }
 </style>
 """
 
 def render_edit():
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    st.markdown(LOCAL_CSS, unsafe_allow_html=True)
 
     # 1. Weryfikacja ID
     try:
@@ -107,11 +63,10 @@ def render_edit():
         if id_os is None: return "- brak / nie wybrano -"
         return mapa_osob.get(id_os, f"ID: {id_os}")
 
-    # --- POCZĄTEK FORMULARZA (Obejmuje całą stronę, łącznie z nagłówkiem) ---
+    # --- POCZĄTEK FORMULARZA ---
     with st.form("edit_form", border=False):
         
         # === GÓRNA BELKA (Anuluj | Tytuł | Zapisz) ===
-        # Układ: Mały przycisk | Duży tytuł na środku | Mały przycisk
         c_back, c_title, c_save = st.columns([1, 6, 1.5], vertical_alignment="center")
         
         with c_back:
@@ -124,7 +79,7 @@ def render_edit():
             st.markdown(f"<div class='edit-header'>✏️ Edycja: {zwierze.Imie}</div>", unsafe_allow_html=True)
             
         with c_save:
-            # PRZYCISK ZAPISU (Błękitny, Primary) - TERAZ NA GÓRZE
+            # PRZYCISK ZAPISU
             is_saved = st.form_submit_button("💾 Zapisz", type="primary", use_container_width=True)
 
         st.divider()
@@ -180,8 +135,6 @@ def render_edit():
 
         # -- Zakładka 2: Dane Medyczne --
         with tab_med:
-            # Usunięto tekst "Poniżej możesz edytować..."
-            
             m1, m2 = st.columns(2)
             with m1:
                 new_wsciek = st.date_input("Szczepienie Wścieklizna", value=zwierze.SzczepienieWscieklizna)
@@ -198,7 +151,7 @@ def render_edit():
             val_opis_zdrowia = getattr(zwierze, "OpisZdrowia", "")
             new_opis_med = st.text_area("Opis / Notatki Medyczne", value=val_opis_zdrowia or "", height=150)
 
-    # --- LOGIKA ZAPISU (Wykonuje się po kliknięciu "Zapisz" na górze) ---
+    # --- LOGIKA ZAPISU ---
     if is_saved:
         dane_update = {
             "Imie": new_imie,

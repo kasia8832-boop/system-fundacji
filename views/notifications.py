@@ -19,7 +19,10 @@ def render_notifications():
     st.divider()
     
     # 1. Pobranie danych z logiki biznesowej
-    lista_alertow = crud.pobierz_alerty_medyczne()
+    lista_alertow = crud.pobierz_alerty_medyczne(
+        rola_usera=st.session_state.user_role,
+        id_osoba=st.session_state.get('user_id_osoba')
+    )
     
     if not lista_alertow:
         st.balloons()
