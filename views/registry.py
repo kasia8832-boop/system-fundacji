@@ -64,12 +64,25 @@ def render_list_view():
         search_query = st.text_input("Szukaj", placeholder="Wpisz imię, rasę lub nr chip...", label_visibility="collapsed")
     
     with c_add:
-        if st.button("➕ Przyjmij", type="primary", use_container_width=True):
-            st.session_state.view_mode = "admission"
-            st.rerun()
+        # Ukrywamy przycisk przed Wolontariuszem i DT
+        if st.session_state.user_role in ["Admin", "Pracownik"]:
+            if st.button("➕ Przyjmij", type="primary", use_container_width=True):
+                st.session_state.view_mode = "admission"
+                st.rerun()
+        else:
+             st.write("") # Zostawia puste miejsce dla zablokowanych ról
 
     # --- 3. POBRANIE DANYCH ---
-    df = crud.pobierz_rejestr_rozszerzony()
+    # Sprawdzamy, kto jest zalogowany
+    rola = st.session_state.user_role
+    id_uzytkownika = st.session_state.user_id_osoba
+    
+    # Jeśli to DT, pobieramy TYLKO jego zwierzęta
+    if rola == "DT":
+        df = crud.pobierz_rejestr_rozszerzony(id_opiekun=id_uzytkownika)
+    else:
+        # W przeciwnym razie pobieramy wszystko
+        df = crud.pobierz_rejestr_rozszerzony()
 
     if df.empty:
         st.info("Baza jest pusta. Dodaj pierwsze zwierzę.")

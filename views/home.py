@@ -68,7 +68,6 @@ def render_home():
                 st.caption("Baza podopiecznych, edycja kartotek, historia leczenia.")
             with ca: 
                 st.write("") 
-                # ZMIANA: Dodano type="primary"
                 if st.button("Otwórz", key="btn_reg", use_container_width=True, type="primary"):
                     st.session_state.current_module = "registry"
                     st.session_state.view_mode = "list"
@@ -86,7 +85,6 @@ def render_home():
                 st.caption("Użytkownicy, Słowniki, Baza Osób, Alerty." if is_admin else "Tylko dla Administratora.")
             with ca:
                 st.write("")
-                # ZMIANA: Dodano type="primary"
                 if st.button("Otwórz", key="btn_adm", disabled=not is_admin, use_container_width=True, type="primary"):
                     st.session_state.current_module = "admin"
                     st.session_state.admin_mode = "dashboard"
@@ -94,33 +92,39 @@ def render_home():
 
     with col_quick:
         st.markdown("##### ⚡ Szybkie Akcje")
-        with st.container(border=True):
-            st.write("**Nowy pies?**")
-            st.caption("Utwórz nową kartę.")
-            if st.button("➕ Przyjmij", type="primary", use_container_width=True):
-                st.session_state.current_module = "registry"
-                st.session_state.view_mode = "admission"
-                st.rerun()
-                
-        with st.container(border=True):
-            st.write("**Analityka**")
-            st.caption("Wykresy i statystyki.")
-            # ZMIANA: Dodano type="primary"
-            if st.button("📊 Raporty", type="primary", use_container_width=True):
-                st.session_state.current_module = "reports"
-                st.rerun()
+        
+        rola = st.session_state.user_role
+        
+        if rola in ["Admin", "Pracownik"]:
+            with st.container(border=True):
+                st.write("**Nowy pies?**")
+                st.caption("Utwórz nową kartę.")
+                if st.button("➕ Przyjmij", type="primary", use_container_width=True):
+                    st.session_state.current_module = "registry"
+                    st.session_state.view_mode = "admission"
+                    st.rerun()
+                    
+            with st.container(border=True):
+                st.write("**Analityka**")
+                st.caption("Wykresy i statystyki.")
+                if st.button("📊 Raporty", type="primary", use_container_width=True):
+                    st.session_state.current_module = "reports"
+                    st.rerun()
+        else:
+            st.info("Brak przypisanych szybkich akcji dla Twojej roli.")
         
         if liczba > 0:
              st.markdown(f"<div style='text-align:center; color:#e74c3c; font-size:12px; margin-top:5px;'>⚠️ Zaległości: {liczba}</div>", unsafe_allow_html=True)
              
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.divider()
     
-    # STATYSTYKI
-    stats = crud.get_dashboard_stats()
-    c_s1, c_s2, c_s3, c_s4 = st.columns(4)
+    # STATYSTYKI (Widoczne tylko dla Zarządu i Pracowników)
+    if st.session_state.user_role in ["Admin", "Pracownik"]:
+        st.divider()
+        stats = crud.get_dashboard_stats()
+        c_s1, c_s2, c_s3, c_s4 = st.columns(4)
 
-    with c_s1: st.markdown(f"<div class='stat-card-light blue-b'><div class='stat-val'>{stats['w_fundacji']}</div><div class='stat-label'>Zwierzęta w fundacji</div></div>", unsafe_allow_html=True)
-    with c_s2: st.markdown(f"<div class='stat-card-light green-b'><div class='stat-val'>{stats['aktywni_wolo']}</div><div class='stat-label'>Aktywni Wolontariusze</div></div>", unsafe_allow_html=True)
-    with c_s3: st.markdown(f"<div class='stat-card-light purple-b'><div class='stat-val'>{stats['aktywne_dt']}</div><div class='stat-label'>Aktywne DT</div></div>", unsafe_allow_html=True)
-    with c_s4: st.markdown(f"<div class='stat-card-light orange-b'><div class='stat-val'>{stats['adopcje_miesiac']}</div><div class='stat-label'>Adopcje (Miesiąc)</div></div>", unsafe_allow_html=True)
+        with c_s1: st.markdown(f"<div class='stat-card-light blue-b'><div class='stat-val'>{stats['w_fundacji']}</div><div class='stat-label'>Zwierzęta w fundacji</div></div>", unsafe_allow_html=True)
+        with c_s2: st.markdown(f"<div class='stat-card-light green-b'><div class='stat-val'>{stats['aktywni_wolo']}</div><div class='stat-label'>Aktywni Wolontariusze</div></div>", unsafe_allow_html=True)
+        with c_s3: st.markdown(f"<div class='stat-card-light purple-b'><div class='stat-val'>{stats['aktywne_dt']}</div><div class='stat-label'>Aktywne DT</div></div>", unsafe_allow_html=True)
+        with c_s4: st.markdown(f"<div class='stat-card-light orange-b'><div class='stat-val'>{stats['adopcje_miesiac']}</div><div class='stat-label'>Adopcje (Miesiąc)</div></div>", unsafe_allow_html=True)

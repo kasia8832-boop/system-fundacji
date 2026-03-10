@@ -14,6 +14,7 @@ from models import (
     SlownikGatunek, SlownikStatus, SlownikKategoria, KonfiguracjaAlerty
 )
 
+
 # ==============================================================================
 # 🔧 NARZĘDZIA POMOCNICZE
 # ==============================================================================
@@ -50,8 +51,7 @@ def verify_user(login_input, password_input):
 
 def create_user(login, email, password, role, id_osoba=None):
     """
-    Tworzy nowego użytkownika.
-    Poprawka: Użycie poprawnej nazwy kolumny 'HasloHash' oraz 'IDOsoba'.
+    Tworzy nowego użytkownika (wersja poprawiona z Hashowaniem hasła).
     """
     db = get_db_session()
     try:
@@ -59,10 +59,13 @@ def create_user(login, email, password, role, id_osoba=None):
         if db.query(Uzytkownik).filter(Uzytkownik.LoginName == login).first():
             return False, "Login jest już zajęty."
 
+        # Szyfrujemy hasło PRZED zapisaniem do bazy!
+        zaszyfrowane_haslo = hash_password(password)
+
         new_user = Uzytkownik(
             LoginName=login,
             Email=email,
-            HasloHash=password,  
+            HasloHash=zaszyfrowane_haslo,  # <--- POPRAWKA
             Rola=role,
             CzyAktywny=True,
             IDOsoba=id_osoba  
@@ -104,15 +107,14 @@ def pobierz_liste_zwierzat(id_opiekun_dt=None):
     finally:
         db.close()
 
-def pobierz_rejestr_rozszerzony():
+def pobierz_rejestr_rozszerzony(id_opiekun=None):
     """
-    Pobiera listę zwierząt wraz z IMIONAMI opiekunów (JOIN),
-    zamiast samych ID. Potrzebne do głównej tabeli Rejestru.
+    Pobiera listę zwierząt wraz z IMIONAMI opiekunów (JOIN).
+    Jeśli podano id_opiekun (dla roli DT), filtruje wyniki tylko dla tej osoby.
     """
     db = get_db_session()
     try:
-        # Łączymy ZWIERZE z OSOBA (dwa razy: raz dla Opiekuna, raz dla Nadzoru)
-        query = text("""
+        sql = """
             SELECT 
                 z.IDZwierze, 
                 z.Imie, 
@@ -122,18 +124,24 @@ def pobierz_rejestr_rozszerzony():
                 z.StatusZwierzecia, 
                 z.DataUrodzenia,
                 z.NrChip,
-                -- Sklejamy Imię i Nazwisko Opiekuna
                 (o1.Imie || ' ' || o1.Nazwisko) AS OpiekunNazwa,
-                -- Sklejamy Imię i Nazwisko Nadzorcy (Wolontariusza)
                 (o2.Imie || ' ' || o2.Nazwisko) AS NadzorcaNazwa
             FROM ZWIERZE z
             LEFT JOIN OSOBA o1 ON z.IDOpiekun = o1.IDOsoba
             LEFT JOIN OSOBA o2 ON z.IDNadzor = o2.IDOsoba
-            ORDER BY z.IDZwierze DESC
-        """)
+        """
         
-        # Używamy pandas read_sql z zapytaniem tekstowym
-        df = pd.read_sql(query, db.bind)
+        # Jeśli funkcja dostała ID (czyli to Dom Tymczasowy), dodajemy filtr WHERE
+        if id_opiekun is not None:
+            sql += " WHERE z.IDOpiekun = :id_op"
+            
+        sql += " ORDER BY z.IDZwierze DESC"
+        
+        query = text(sql)
+        # Przekazujemy parametr do SQLAlchemy, żeby ustrzec się przed SQL Injection
+        params = {"id_op": id_opiekun} if id_opiekun is not None else {}
+        
+        df = pd.read_sql(query, db.bind, params=params)
         return df
     finally:
         db.close()
