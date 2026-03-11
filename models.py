@@ -68,14 +68,13 @@ class Zwierze(Base):
     Zdjecie = Column(LargeBinary)
     ZrodloFinansowania = Column(String(100))
 
-    # --- Pola Ogłoszeniowe (DODANE) ---
+    # --- Pola Ogłoszeniowe ---
     CzyOgloszenieOLX = Column(Boolean, default=False)
     CzyOgloszenieWWW = Column(Boolean, default=False)
 
-    # --- Profil Medyczny (PRZENIESIONE) ---
-    # Brak daty w DataKastracji oznacza brak kastracji
+    # --- Profil Medyczny ---
     DataKastracji = Column(Date, nullable=True) 
-    SzczepienieWscieklizna = Column(Date) # Data ważności
+    SzczepienieWscieklizna = Column(Date)
     SzczepienieZakazne = Column(Date)
     Odrobaczenie = Column(Date)
     OchronaKleszczeDo = Column(Date)
@@ -89,7 +88,7 @@ class Zwierze(Base):
     Opiekun = relationship("Osoba", foreign_keys=[IDOpiekun], back_populates="ZwierzetaPodOpieka")
     Nadzorca = relationship("Osoba", foreign_keys=[IDNadzor], back_populates="ZwierzetaNadzorowane")
     
-    # ProfilMedyczny usunięty stąd
+    # ProfilMedyczny
     Historia = relationship("HistoriaZdarzen", back_populates="Zwierze", cascade="all, delete-orphan")
 
 # ==============================================================================

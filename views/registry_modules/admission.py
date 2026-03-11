@@ -1,14 +1,12 @@
 """
 MODUŁ REJESTRU: PRZYJĘCIE ZWIERZĘCIA
-------------------------------------
-Wersja 3.0: Pełna zgodność z jasnym motywem. Usunięto stare bloki CSS.
+
 """
 import streamlit as st
 import crud
 from datetime import date
 
 # --- STYL LOKALNY ---
-# Reszta (tło, inputy, przyciski) dziedziczy z globalnego styles.py
 LOCAL_CSS = """
 <style>
     .admission-title {
@@ -74,7 +72,6 @@ def render_admission():
             with c2:
                 nr_chip = st.text_input("Nr Chip")
                 status = st.selectbox("Status początkowy", statusy, index=default_status_idx)
-                # Dwie daty obok siebie
                 cd1, cd2 = st.columns(2)
                 with cd1: data_przyjecia = st.date_input("Data przyjęcia", value=date.today())
                 with cd2: data_urodzenia = st.date_input("Data urodzenia (przybliżona)", value=None)
@@ -90,7 +87,6 @@ def render_admission():
                 zrodlo = st.text_input("Źródło finansowania", placeholder="np. Miasto, Fundacja...")
             with c4:
                 sel_opiekun = st.selectbox("Opiekun / Dom Tymczasowy", lista_osob)
-                # Checkboxy
                 st.write("Status ogłoszeń:")
                 co1, co2 = st.columns(2)
                 with co1: czy_olx = st.checkbox("Ogłoszenie OLX")
@@ -129,12 +125,10 @@ def render_admission():
                 id_nadzor = mapa_osob.get(sel_nadzor)
                 id_opiekun = mapa_osob.get(sel_opiekun)
 
-                # Przetwarzanie zdjęcia na bajty
                 zdjecie_blob = None
                 if zdjecie:
                     zdjecie_blob = zdjecie.getvalue()
 
-                # Zapis do bazy
                 new_id = crud.dodaj_nowe_zwierze(
                     imie=imie,
                     gatunek=gatunek,
@@ -154,7 +148,6 @@ def render_admission():
                 )
 
                 if new_id:
-                    # Aktualizacja medyczna
                     med_updates = {}
                     if szczep_wsciek: med_updates['SzczepienieWscieklizna'] = szczep_wsciek
                     if szczep_zakazne: med_updates['SzczepienieZakazne'] = szczep_zakazne

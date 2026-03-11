@@ -1,5 +1,5 @@
 """
-WIDOK: KOKPIT (HOME) - JASNY MOTYW
+WIDOK: KOKPIT
 """
 import streamlit as st
 import crud
@@ -118,7 +118,7 @@ def render_home():
              
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # STATYSTYKI (Widoczne tylko dla Zarządu i Pracowników)
+    # STATYSTYKI
     if st.session_state.user_role in ["Admin", "Pracownik"]:
         st.divider()
         stats = crud.get_dashboard_stats()

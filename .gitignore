@@ -1,0 +1,17 @@
+# 1. Baza danych i kopie zapasowe (NIGDY NA GITHUBA!)
+fundacja.db
+backups/
+
+# 2. Pamięć podręczna Pythona (Śmieci systemowe)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 3. Środowiska wirtualne
+venv/
+.venv/
+env/
+
+# 4. Sekrety
+.env

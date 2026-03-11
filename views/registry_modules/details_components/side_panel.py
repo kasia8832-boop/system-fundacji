@@ -1,8 +1,6 @@
 """
 KOMPONENT KARTY: PANEL BOCZNY
------------------------------
-Zdjęcie + Mikro-Karty.
-Poprawka: OLX i WWW jedno pod drugim (pionowo).
+
 """
 import streamlit as st
 import crud
@@ -20,7 +18,6 @@ def render_side_panel(r):
     
     # 2. DANE ORGANIZACYJNE
     
-    # Rozwiązywanie nazwisk
     id_nadzor = r.get('IDNadzor')
     id_opiekun = r.get('IDOpiekun')
     nazwa_nadzor = "-"

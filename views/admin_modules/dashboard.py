@@ -1,17 +1,12 @@
 """
 MODUŁ ADMINA: DASHBOARD (PULPIT)
---------------------------------
-Styl: Kafelki nawigacyjne w układzie Grid.
-Usunięto nagłówek tekstowy.
+
 """
 import streamlit as st
 
 def render_dashboard():
     role = st.session_state.user_role
-    
-    # Usunięto st.markdown("### 🎛️ Pulpit Sterowniczy") zgodnie z życzeniem
-    
-    # Układ 2x2 kafelków
+
     c1, c2 = st.columns(2)
     
     # --- KAFELETEK 1: DOSTĘP ---
@@ -19,7 +14,7 @@ def render_dashboard():
         with st.container(border=True):
             st.subheader("🔐 Dostęp i Konta")
             st.markdown("Zarządzanie użytkownikami, hasłami i blokadami kont.")
-            st.write("") # Odstęp
+            st.write("") 
             
             if role == "Admin":
                 if st.button("Zarządzaj Dostępem", use_container_width=True): 
@@ -39,7 +34,7 @@ def render_dashboard():
                 st.session_state.admin_mode = "users"
                 st.rerun()
             
-    st.write("") # Odstęp pionowy między rzędami
+    st.write("") 
     
     c3, c4 = st.columns(2)
     

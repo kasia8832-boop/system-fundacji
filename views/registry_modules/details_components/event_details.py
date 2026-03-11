@@ -1,6 +1,5 @@
 """
 KOMPONENT: SZCZEGÓŁY ZDARZENIA
-Wersja 3.0: ORM Fix. Obsługa załączników BLOB.
 """
 import streamlit as st
 import crud
@@ -32,7 +31,6 @@ def render_event_details(event_id):
             c2.write(f"**{f['NazwaPliku']}** ({f['RozmiarBajt']/1024:.1f} KB)")
             
             with c3:
-                # Pobieramy treść tylko na żądanie
                 content = crud.pobierz_plik_content(f['ID_Zalacznik'])
                 if content:
                     st.download_button("⬇️", content[1], file_name=content[0], mime=content[2], key=f"dl_{f['ID_Zalacznik']}")

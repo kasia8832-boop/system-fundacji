@@ -15,7 +15,6 @@ def apply_custom_css():
         /* Ukrycie Sidebara */
         [data-testid="stSidebar"] {{ display: none; }}
         
-        /* Naprawione tło aplikacji - gradient */
         .stApp {{
             background: {BG_GRADIENT} !important;
             background-attachment: fixed !important;
@@ -79,7 +78,7 @@ def apply_custom_css():
             color: #2980b9 !important;
         }}
         
-        /* KONTENERY (Białe Karty) */
+        /* KONTENERY  */
         [data-testid="stVerticalBlockBorderWrapper"] > div {{
             background-color: #ffffff !important;
             border: 1px solid #f1f2f6 !important;
@@ -88,7 +87,7 @@ def apply_custom_css():
             padding: 20px;
         }}
 
-        /* TABELA (Naprawa wylewania się z ramki) */
+        /* TABELA  */
         [data-testid="stDataFrame"] {{
             background-color: #ffffff !important;
             border: 1px solid #f1f2f6 !important;

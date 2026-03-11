@@ -1,14 +1,12 @@
 """
 MODUŁ ADMINA: SŁOWNIKI
-----------------------
-Wersja 4.0: Usunięto przycisk powrotu i nagłówek (obsługiwane globalnie przez admin.py).
+
 """
 import streamlit as st
 import crud
 import time
 
 def render_dictionaries():
-    # USUNIĘTO: Lokalny przycisk "Wróć" oraz st.header (są teraz w admin.py)
     
     mapa_slownikow = {
         "Gatunki Zwierząt": "gatunek",
@@ -16,9 +14,6 @@ def render_dictionaries():
         "Kategorie Zdarzeń": "kategoria"
     }
 
-    # Wybór słownika
-    # Dodajemy etykietę, ale chowamy ją (label_visibility), żeby było estetyczniej, 
-    # bo kontekst jest jasny z tytułu strony.
     wybrany_label = st.selectbox(
         "Wybierz słownik do edycji", 
         list(mapa_slownikow.keys()),
@@ -37,11 +32,9 @@ def render_dictionaries():
             wartosci = crud.pobierz_slownik(klucz_crud)
             
             if wartosci:
-                # Wyświetlamy jako tabelkę z przyciskami
                 for val in wartosci:
                     cc1, cc2 = st.columns([5, 1], vertical_alignment="center")
                     cc1.text(f"• {val}")
-                    # Przycisk usuwania (mały)
                     if cc2.button("🗑️", key=f"del_{klucz_crud}_{val}", help="Usuń wartość"):
                         crud.usun_wartosc_slownika(klucz_crud, val)
                         st.rerun()
@@ -56,7 +49,6 @@ def render_dictionaries():
                 nw = st.text_input("Nazwa", placeholder="np. Królik")
                 
                 st.write("")
-                # Przycisk Primary (niebieski z admin.py)
                 if st.form_submit_button("Dodaj", type="primary", use_container_width=True):
                     if nw:
                         crud.dodaj_wartosc_slownika(klucz_crud, nw)

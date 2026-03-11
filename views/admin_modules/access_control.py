@@ -1,7 +1,6 @@
 """
 MODUŁ ADMINA: ZARZĄDZANIE DOSTĘPEM
-----------------------------------
-Poprawka: Usunięcie zbędnego tekstu informacyjnego.
+
 """
 import streamlit as st
 import crud
@@ -95,7 +94,6 @@ def render_access_control():
     with t2:
         with st.container(border=True):
             st.subheader("Formularz Rejestracji")
-            # TU BYŁ NAPIS - TERAZ GO NIE MA
             
             with st.form("new_user_form", clear_on_submit=True):
                 wybrana_osoba_str = st.selectbox("Powiązana Osoba *", lista_opcji_ludzi)

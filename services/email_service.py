@@ -5,13 +5,10 @@ Rola: Wrapper (opakowanie) dla biblioteki 'smtplib'.
 Zadanie: Dostarczenie prostego interfejsu do wysyłania wiadomości e-mail
 bez konieczności powtarzania kodu konfiguracyjnego w innych miejscach aplikacji.
 
-Zależności:
-- services.config: Pobiera stamtąd dane logowania, zachowując separację danych od logiki.
 """
 
 import smtplib
 from email.mime.text import MIMEText
-# Importujemy konfigurację z tego samego pakietu (folderu services)
 from services import config 
 
 def wyslij_email_resetu(odbiorca, kod_resetu):
@@ -29,7 +26,7 @@ def wyslij_email_resetu(odbiorca, kod_resetu):
     # 1. Przygotowanie nagłówków i treści wiadomości
     temat = "Fundacja - Reset Hasła"
     
-    # Używamy f-string do wstrzyknięcia kodu weryfikacyjnego w treść
+
     tresc = f"""
     Witaj!
     
@@ -44,23 +41,18 @@ def wyslij_email_resetu(odbiorca, kod_resetu):
 
     try:
         # 2. Tworzenie obiektu MIMEText
-        # MIME (Multipurpose Internet Mail Extensions) to standard formatowania maili.
-        # 'plain' oznacza czysty tekst (brak HTML), 'utf-8' zapewnia obsługę polskich znaków (ą, ę, ś).
         msg = MIMEText(tresc, 'plain', 'utf-8')
         msg['Subject'] = temat
-        msg['From'] = config.EMAIL_SENDER      # Pobranie nadawcy z pliku config
+        msg['From'] = config.EMAIL_SENDER     
         msg['To'] = odbiorca
 
         # 3. Nawiązywanie połączenia z serwerem SMTP
-        # SMTP (Simple Mail Transfer Protocol) to protokół warstwy aplikacji do wysyłania poczty.
         server = smtplib.SMTP(config.SMTP_SERVER, config.SMTP_PORT)
         
         # 4. Szyfrowanie połączenia (TLS - Transport Layer Security)
-        # To krytyczny krok bezpieczeństwa. Zapobiega przechwyceniu hasła w locie.
         server.starttls() 
         
         # 5. Autentykacja (Logowanie)
-        # .strip() usuwa białe znaki, .replace() usuwa spacje - sanitizacja danych wejściowych.
         clean_password = config.EMAIL_PASSWORD.replace(" ", "").strip()
         server.login(config.EMAIL_SENDER, clean_password)
         
@@ -74,11 +66,9 @@ def wyslij_email_resetu(odbiorca, kod_resetu):
         return True, "Kod weryfikacyjny został wysłany na Twój e-mail."
         
     except smtplib.SMTPAuthenticationError:
-        # Specyficzny błąd logowania - najczęściej błędne hasło aplikacji lub blokada Google.
         print("❌ [EMAIL ERROR] Błąd autoryzacji SMTP. Sprawdź plik services/config.py.")
         return False, "Błąd serwera pocztowego (Autoryzacja)."
         
     except Exception as e:
-        # Catch-all dla innych błędów (np. brak internetu, timeout DNS).
         print(f"❌ [EMAIL ERROR] Nieoczekiwany wyjątek: {e}")
         return False, "Wystąpił błąd podczas łączenia z serwerem pocztowym."

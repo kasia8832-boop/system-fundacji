@@ -2,8 +2,6 @@ import random
 from datetime import date, timedelta
 from faker import Faker
 from werkzeug.security import generate_password_hash
-
-# Import Twojej bazy i modeli
 from database import SessionLocal
 import models as m
 
@@ -77,7 +75,7 @@ def seed_realistic_data():
             uzytkownik = m.Uzytkownik(
                 LoginName=login + str(random.randint(1,99)),
                 Email=osoba.Email,
-                HasloHash=generate_password_hash("haslo123"), # Uproszczone hasło dla testów
+                HasloHash=generate_password_hash("haslo123"),
                 Rola=rola,
                 CzyAktywny=True,
                 IDOsoba=osoba.IDOsoba
@@ -102,7 +100,7 @@ def seed_realistic_data():
         nadzorca = random.choice(id_personelu) if id_personelu else None
         opiekun = random.choice(id_adoptujacych) if status in ["Adoptowany", "Dom Tymczasowy"] and id_adoptujacych else None
 
-        imie_psa = psie_imiona[i % len(psie_imiona)] # Zapewniamy w miarę unikalne imiona z naszej puli
+        imie_psa = psie_imiona[i % len(psie_imiona)] 
 
         zwierze = m.Zwierze(
             Imie=imie_psa,
@@ -112,13 +110,13 @@ def seed_realistic_data():
             DataUrodzenia=data_urodzenia,
             DataPrzyjecia=data_przyjecia,
             StatusZwierzecia=status,
-            NrChip=f"6160939{random.randint(10000000, 99999999)}", # Realistyczny format polskiego chipa
+            NrChip=f"6160939{random.randint(10000000, 99999999)}",
             Opis=f"{imie_psa} to wspaniały pies, który trafił do fundacji z interwencji. Szukamy dla niego kochającego i cierpliwego domu.",
             ZrodloFinansowania=random.choice(zrodla_finansowania),
             CzyOgloszenieOLX=random.choice([True, False]),
             CzyOgloszenieWWW=True,
             DataKastracji=data_przyjecia + timedelta(days=14) if random.choice([True, False]) else None,
-            SzczepienieWscieklizna=data_przyjecia + timedelta(days=365), # Ważne rok do przodu
+            SzczepienieWscieklizna=data_przyjecia + timedelta(days=365), 
             OpisZdrowia=random.choice(opisy_zdrowia),
             IDNadzor=nadzorca,
             IDOpiekun=opiekun
@@ -134,7 +132,6 @@ def seed_realistic_data():
             autor = random.choice(id_uzytkownikow) if id_uzytkownikow else None
             data_zdarzenia = data_przyjecia + timedelta(days=random.randint(1, 30))
             
-            # Dobieramy sensowny opis do wylosowanej kategorii
             kategoria = random.choice(["Wizyta Weterynaryjna", "Szczepienie", "Zabieg", "Behawiorysta", "Notatka Wolontariusza"])
             
             if kategoria == "Szczepienie":
@@ -145,10 +142,9 @@ def seed_realistic_data():
                 opis = random.choice(notatki_behawiorysta)
             elif kategoria == "Notatka Wolontariusza":
                 opis = random.choice(notatki_wolontariusza)
-            else: # Wizyta Weterynaryjna
+            else: 
                 opis = random.choice(["Wizyta kontrolna. Osłuchowo w porządku, waga w normie.", "Odrobaczenie tabletką Drontal Plus.", "Pies dostał preparat Bravecto na kleszcze (ważny 3 miesiące)."])
 
-            # Jeśli to adopcja (ostatnie zdarzenie dla psa adoptowanego)
             if status == "Adoptowany" and d == 4:
                 kategoria = "Adopcja"
                 opis = "Podpisano umowę adopcyjną. Pies pojechał do nowego domu! Powodzenia!"

@@ -1,7 +1,6 @@
 # crud.py
 """
-MODUŁ: CRUD (Create, Read, Update, Delete) - Wersja ORM (SQLAlchemy)
---------------------------------------------------------------------
+MODUŁ: CRUD (Create, Read, Update, Delete) 
 Odpowiada za logikę biznesową i komunikację z bazą danych.
 """
 import pandas as pd
@@ -16,7 +15,7 @@ from models import (
 
 
 # ==============================================================================
-# 🔧 NARZĘDZIA POMOCNICZE
+# NARZĘDZIA POMOCNICZE
 # ==============================================================================
 
 def get_db_session():
@@ -33,7 +32,7 @@ def hash_password(password: str) -> str:
     ).hex()
 
 # ==============================================================================
-# 👤 1. UŻYTKOWNICY I LOGOWANIE
+# 1. UŻYTKOWNICY I LOGOWANIE
 # ==============================================================================
 
 def verify_user(login_input, password_input):
@@ -55,7 +54,6 @@ def create_user(login, email, password, role, id_osoba=None):
     """
     db = get_db_session()
     try:
-        # Sprawdzamy czy login jest wolny
         if db.query(Uzytkownik).filter(Uzytkownik.LoginName == login).first():
             return False, "Login jest już zajęty."
 
@@ -65,7 +63,7 @@ def create_user(login, email, password, role, id_osoba=None):
         new_user = Uzytkownik(
             LoginName=login,
             Email=email,
-            HasloHash=zaszyfrowane_haslo,  # <--- POPRAWKA
+            HasloHash=zaszyfrowane_haslo,
             Rola=role,
             CzyAktywny=True,
             IDOsoba=id_osoba  
@@ -80,7 +78,7 @@ def create_user(login, email, password, role, id_osoba=None):
         db.close()
 
 # ==============================================================================
-# 🐾 2. ZWIERZĘTA (LISTING I SZCZEGÓŁY)
+# 2. ZWIERZĘTA (LISTING I SZCZEGÓŁY)
 # ==============================================================================
 
 def pobierz_liste_zwierzat(id_opiekun_dt=None):
@@ -138,7 +136,6 @@ def pobierz_rejestr_rozszerzony(id_opiekun=None):
         sql += " ORDER BY z.IDZwierze DESC"
         
         query = text(sql)
-        # Przekazujemy parametr do SQLAlchemy, żeby ustrzec się przed SQL Injection
         params = {"id_op": id_opiekun} if id_opiekun is not None else {}
         
         df = pd.read_sql(query, db.bind, params=params)
@@ -192,7 +189,7 @@ def dodaj_nowe_zwierze(imie, gatunek, rasa, plec, status, id_nadzorca=None, id_o
         db.close()
 
 # ==============================================================================
-# ✏️ 3. EDYCJA DANYCH
+# 3. EDYCJA DANYCH
 # ==============================================================================
 
 def aktualizuj_dane_podstawowe(id_zwierze, dane_dict):
@@ -242,7 +239,7 @@ def adoptuj_zwierze(id_zwierze, id_nowy_wlasciciel):
         db.close()
 
 # ==============================================================================
-# 🏥 4. MEDYCYNA I HISTORIA
+# 4. MEDYCYNA I HISTORIA
 # ==============================================================================
 
 def dodaj_wpis_historii(id_zwierze, id_user, kategoria, opis):
@@ -285,14 +282,13 @@ def pobierz_historie(id_zwierze):
         db.close()
 
 # ==============================================================================
-# 👥 5. OSOBY
+# 5. OSOBY
 # ==============================================================================
 
 def pobierz_wszystkie_osoby():
     """Zwraca DataFrame wszystkich osób wraz ze szczegółami kontaktowymi."""
     db = get_db_session()
     try:
-        # POBIERAMY TERAZ WSZYSTKIE KOLUMNY POTRZEBNE DO EDYCJI
         q = db.query(Osoba.IDOsoba, Osoba.Imie, Osoba.Nazwisko, Osoba.Telefon, 
                      Osoba.Email, Osoba.AdresMiasto, Osoba.AdresUlica, 
                      Osoba.AdresNrLokalu, Osoba.AdresKodPocztowy)
@@ -367,10 +363,10 @@ def anonimizuj_osobe(id_osoba):
         db.close()
 
 # ==============================================================================
-# 📚 6. SŁOWNIKI
+# 6. SŁOWNIKI
 # ==============================================================================
 
-def get_dictionary(nazwa_modelu): # Alias dla kompatybilności
+def get_dictionary(nazwa_modelu):
     return pobierz_slownik(nazwa_modelu)
 
 def pobierz_slownik(nazwa_modelu):
@@ -380,7 +376,7 @@ def pobierz_slownik(nazwa_modelu):
         'gatunek': SlownikGatunek,
         'status': SlownikStatus,
         'kategoria': SlownikKategoria,
-        'SLOWNIK_GATUNKI': SlownikGatunek,    # Aliasy
+        'SLOWNIK_GATUNKI': SlownikGatunek,    
         'SLOWNIK_STATUSY': SlownikStatus,
         'SLOWNIK_KATEGORIE': SlownikKategoria
     }
@@ -394,12 +390,11 @@ def pobierz_slownik(nazwa_modelu):
     finally:
         db.close()
 
-# Aliasy do usuwania/dodawania (dla kompatybilności z adminem)
 def delete_dict_value(typ, wartosc): usun_wartosc_slownika(typ, wartosc)
 def add_dict_value(typ, wartosc): dodaj_wartosc_slownika(typ, wartosc)
 
 # ==============================================================================
-# 🚨 7. POWIADOMIENIA I ALERTY
+# 7. POWIADOMIENIA I ALERTY
 # ==============================================================================
 
 def pobierz_alerty_medyczne(rola_usera="Admin", id_osoba=None):
@@ -421,10 +416,9 @@ def pobierz_alerty_medyczne(rola_usera="Admin", id_osoba=None):
 
         for zwierzak in zwierzeta:
             try:
-                # --- PANCERNA OBSŁUGA DATY PRZYJĘCIA ---
                 data_przyj = zwierzak.DataPrzyjecia
                 if isinstance(data_przyj, datetime):
-                    data_przyj = data_przyj.date() # Obcinamy godziny jeśli to datetime
+                    data_przyj = data_przyj.date()
                 elif isinstance(data_przyj, str):
                     data_przyj = datetime.strptime(data_przyj.split(' ')[0], '%Y-%m-%d').date()
                 
@@ -461,7 +455,7 @@ def pobierz_alerty_medyczne(rola_usera="Admin", id_osoba=None):
 
                 for regula in reguly:
                     pole = regula.KodPola
-                    limit_dni = int(regula.DniWaznosci) # Wymuszamy Integer
+                    limit_dni = int(regula.DniWaznosci)
                     etykieta = regula.Etykieta
                     data_baza = getattr(zwierzak, pole, None)
                     
@@ -472,7 +466,6 @@ def pobierz_alerty_medyczne(rola_usera="Admin", id_osoba=None):
                         })
                         continue 
 
-                    # --- PANCERNA OBSŁUGA DATY MEDYCZNEJ ---
                     if isinstance(data_baza, datetime):
                         data_baza = data_baza.date()
                     elif isinstance(data_baza, str):
@@ -516,7 +509,7 @@ def pobierz_alerty_medyczne(rola_usera="Admin", id_osoba=None):
         db.close()
 
 # ==============================================================================
-# 📂 8. ZAŁĄCZNIKI I HISTORIA
+# 8. ZAŁĄCZNIKI I HISTORIA
 # ==============================================================================
 
 def usun_wpis_historii(id_historia):
@@ -554,7 +547,6 @@ def pobierz_liste_zalacznikow(id_historia):
     finally:
         db.close()
         
-# Alias dla kompatybilności ze starym kodem
 def pobierz_zalaczniki(id_historia): return pobierz_liste_zalacznikow(id_historia)
 
 def pobierz_plik_content(id_zalacznik):
@@ -600,7 +592,7 @@ def usun_zalacznik(id_zalacznik):
         db.close()
 
 # ==============================================================================
-# 🛠️ 9. ADMINISTRACJA
+# 9. ADMINISTRACJA
 # ==============================================================================
 
 # Userzy
@@ -609,15 +601,13 @@ def pobierz_wszystkich_uzytkownikow():
     try:
         q = db.query(Uzytkownik.IDUser, Uzytkownik.LoginName, Uzytkownik.Email, Uzytkownik.Rola, Uzytkownik.CzyAktywny)
         df = pd.read_sql(q.statement, db.bind)
-        # Rename dla kompatybilności z adminem (ID_User vs IDUser)
         df.rename(columns={'IDUser': 'ID_User'}, inplace=True)
         return df
     finally:
         db.close()
 
-# Aliasy
 def get_all_users(): return pobierz_wszystkich_uzytkownikow()
-def get_all_people(): return pobierz_wszystkie_osoby() # Dla admina
+def get_all_people(): return pobierz_wszystkie_osoby()
 def add_person(*args): return dodaj_osobe(*args)
 def delete_user(uid): usun_uzytkownika(uid)
 def toggle_user_status(uid, status): zmien_status_uzytkownika(uid, status)
@@ -652,7 +642,6 @@ def usun_uzytkownika(id_user):
 # Słowniki
 def dodaj_wartosc_slownika(typ_slownika, wartosc):
     db = get_db_session()
-    # Mapowanie nazw tabel (SLOWNIK_XXX) na modele
     model_map = {
         'gatunek': SlownikGatunek, 'SLOWNIK_GATUNKI': SlownikGatunek,
         'status': SlownikStatus, 'SLOWNIK_STATUSY': SlownikStatus,
@@ -725,7 +714,7 @@ def zapisz_konfiguracje_alertow(edited_df):
 
 
 # ==============================================================================
-# 📈 10. STATYSTYKI DASHBOARDU
+# 10. STATYSTYKI DASHBOARDU
 # ==============================================================================
 
 def get_dashboard_stats():

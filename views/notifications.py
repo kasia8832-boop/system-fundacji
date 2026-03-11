@@ -1,8 +1,6 @@
 """
 WIDOK: CENTRUM POWIADOMIEŃ
---------------------------
-Wyświetla listę zwierząt wymagających interwencji medycznej.
-Pozwala jednym kliknięciem przejść do karty danego zwierzaka.
+
 """
 import streamlit as st
 import crud
@@ -32,7 +30,6 @@ def render_notifications():
     st.warning(f"⚠️ Znaleziono {len(lista_alertow)} zadań wymagających uwagi.")
     
     # 2. Wyświetlanie jako tabela z akcjami
-    # Iterujemy po liście i tworzymy wiersze
     for alert in lista_alertow:
         with st.container(border=True):
             c1, c2, c3 = st.columns([1, 4, 2])
@@ -45,8 +42,6 @@ def render_notifications():
                 st.error(alert['komunikat'])
                 
             with c3:
-                # Przycisk przenoszący do szczegółów zwierzęcia
-                # Ustawiamy odpowiednie stany sesji, aby Registry wiedziało co pokazać
                 if st.button("Idź do karty ➡️", key=f"alert_{alert['id']}_{alert['komunikat']}"):
                     st.session_state.current_module = "registry"
                     st.session_state.view_mode = "details"

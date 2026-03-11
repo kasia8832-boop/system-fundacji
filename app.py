@@ -1,23 +1,19 @@
 import streamlit as st
-
-# ==============================================================================
-# 🚨 KONFIGURACJA STRONY (Musi być na samej górze!)
-# ==============================================================================
 st.set_page_config(page_title="Fundacja - SYSTEM", layout="wide")
 
 import warnings
 import styles
 from services import maintenance
 
-# Importujemy widoki (w tym notifications)
+# Importujemy widoki
 from views import login, home, registry, admin, notifications, reports
 
-# --- KONFIGURACJA STARTOWA ---
+#  KONFIGURACJA STARTOWA 
 warnings.filterwarnings('ignore') 
 
-# ==========================================
-# 🕒 AUTOMATYCZNY BACKUP W TLE
-# ==========================================
+
+# AUTOMATYCZNY BACKUP W TLE
+
 @st.cache_resource
 def init_backup_system():
     """Uruchamia wątek backupu tylko raz przy starcie serwera"""
@@ -25,11 +21,10 @@ def init_backup_system():
     return True
 
 init_backup_system()
-# ==========================================
 
 styles.apply_custom_css()
 
-# --- STAN APLIKACJI (Inicjalizacja zmiennych sesji) ---
+#  STAN APLIKACJI
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'user_name' not in st.session_state: st.session_state.user_name = "User"
 if 'user_role' not in st.session_state: st.session_state.user_role = "Wolontariusz"
@@ -41,14 +36,14 @@ if 'active_animal_id' not in st.session_state: st.session_state.active_animal_id
 if 'admin_mode' not in st.session_state: st.session_state.admin_mode = "dashboard"
 
 
-# --- GŁÓWNY ROUTER (Kierownik Ruchu) ---
+#  GŁÓWNY ROUTER
 def main():
-    # 1. Jeśli niezalogowany -> Pokaż Login
+    # Jeśli niezalogowany -> Pokaż Login
     if not st.session_state.logged_in:
         login.render_login()
         return
 
-    # 2. Jeśli zalogowany -> Sprawdź jaki moduł wybrać
+    # Jeśli zalogowany -> Sprawdź jaki moduł wybrać
     module = st.session_state.current_module
     
     if module == "home":

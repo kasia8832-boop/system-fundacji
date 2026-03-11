@@ -1,10 +1,6 @@
 """
 MODUŁ REJESTRU: PROCES ADOPCJI
-------------------------------
-Finalizacja adopcji.
-Wersja 3.0 (ORM): 
-- Wymaga wybrania osoby z bazy (Tabela OSOBA).
-- Przypisuje IDOpiekun i zmienia status.
+
 """
 import streamlit as st
 from datetime import date
@@ -35,14 +31,11 @@ def render_adoption():
             st.rerun()
         return
 
-    # Tworzymy słownik do selectboxa: { "Jan Kowalski (Warszawa)": ID_Osoba }
-    # df_osoby ma kolumny: IDOsoba, Display
     opcje_osoby = dict(zip(df_osoby['Display'], df_osoby['IDOsoba']))
 
     with st.form("adoption_form"):
         wybrana_osoba_label = st.selectbox("Wybierz Adoptującego", options=opcje_osoby.keys())
         
-        # Checkbox umowy
         chk = st.checkbox("✅ Potwierdzam, że umowa adopcyjna została podpisana.")
         
         col_btn1, col_btn2 = st.columns([1, 4])
@@ -57,18 +50,11 @@ def render_adoption():
             if not chk:
                 st.error("Musisz potwierdzić podpisanie umowy!")
             else:
-                # Pobieramy ID wybranej osoby
                 id_nowy_wlasciciel = int(opcje_osoby[wybrana_osoba_label])
                 
-                # Wykonanie adopcji w bazie
-                # Funkcja crud.adoptuj_zwierze(id_zwierze, id_nowy_wlasciciel)
                 if crud.adoptuj_zwierze(id_zw, id_nowy_wlasciciel):
                     
-                    # Opcjonalnie: Dodajemy wpis do historii
-                    user_id = st.session_state.get('user_id_osoba') # Jeśli user jest w tabeli Osoba
-                    # Tutaj mały hack - potrzebujemy ID_User do historii, a mamy ID_Osoba w sesji...
-                    # Ale crud.adoptuj_zwierze zmienia status.
-                    # Możemy dodać wpis historii osobno, jeśli chcemy być precyzyjni.
+                    user_id = st.session_state.get('user_id_osoba')
                     
                     st.balloons()
                     st.success(f"Gratulacje! {imie} ma nowego opiekuna: {wybrana_osoba_label}")

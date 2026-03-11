@@ -1,15 +1,12 @@
 """
 MODUŁ REJESTRU: EDYCJA
-----------------------
-Wersja 5.0: Pełna kompatybilność z jasnym motywem, czyszczenie starych CSS.
+
 """
 import streamlit as st
 import crud
 from datetime import date
 
 # --- STYL LOKALNY ---
-# Zostawiamy tylko to, co odpowiada za unikalny wygląd nagłówka na tej stronie.
-# Reszta (tła, inputy, zakładki, przyciski) jest dziedziczona z globalnego styles.py.
 LOCAL_CSS = """
 <style>
     /* Nagłówek - wyśrodkowany, dopasowany do jasnego motywu */

@@ -1,8 +1,5 @@
 """
 ROUTER MODUŁU: ADMIN
---------------------
-Wersja ostateczna v4: Pełna zgodność z jasnym motywem (Soft Cloud).
-Usunięto stare CSS blokujące globalny plik styles.py.
 """
 import streamlit as st
 from views.admin_modules import dashboard, access_control, people_db, dictionaries, alerts_config
@@ -24,13 +21,11 @@ LOCAL_CSS = """
 """
 
 def render_admin():
-    # Wstrzykujemy tylko styl dla tytułu
     st.markdown(LOCAL_CSS, unsafe_allow_html=True)
     
     role = st.session_state.user_role
     mode = st.session_state.admin_mode
     
-    # Strażnik dostępu
     if role == "DT": 
         st.error("⛔ BRAK DOSTĘPU")
         if st.button("Wróć"):
@@ -56,7 +51,6 @@ def render_admin():
     c_nav, c_title, c_void = st.columns([1.5, 7, 1.5], vertical_alignment="center")
     
     with c_nav:
-        # Przycisk Secondary (biały z obwódką)
         if st.button("🏠 Menu", help="Wróć do głównego ekranu", type="secondary", use_container_width=True):
             st.session_state.current_module = "home"
             st.rerun()

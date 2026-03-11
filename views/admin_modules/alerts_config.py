@@ -1,14 +1,12 @@
 """
 PODMODUŁ ADMINA: ALERTÓW
-------------------------
-Wersja 4.0: Usunięto przycisk powrotu i nagłówek (obsługiwane globalnie przez admin.py).
+
 """
 import streamlit as st
 import crud
 import pandas as pd
 
 def render_alerts_config():
-    # USUNIĘTO: Lokalny przycisk "Wróć" i Nagłówek.
     
     with st.container(border=True):
         st.info("Zdefiniuj, po ilu dniach system ma oznaczać szczepienia/badania jako przeterminowane (czerwone).")
@@ -39,7 +37,7 @@ def render_alerts_config():
         )
 
         st.write("")
-        # 3. Zapis - Przycisk Primary (niebieski z admin.py)
+        # 3. Zapis 
         if st.button("💾 Zapisz Konfigurację", type="primary", use_container_width=True):
             if crud.zapisz_konfiguracje_alertow(edited_df):
                 st.success("Zaktualizowano ustawienia alertów!")

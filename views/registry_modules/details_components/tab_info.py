@@ -1,7 +1,6 @@
 """
 KOMPONENT KARTY: ZAKŁADKA 'DANE'
---------------------------------
-Metryczka: Gatunek, Rasa, Płeć, Data Urodzenia, Data Przyjęcia, Status, Chip.
+
 """
 import streamlit as st
 import pandas as pd

@@ -1,8 +1,6 @@
 """
 MODUŁ: REJESTR ZWIERZĄT
------------------------
-Lista podopiecznych z zaawansowanym filtrowaniem.
-Wersja 3.1: Wymuszony jasny motyw, usunięto stare CSS, zwiększono tabelę.
+
 """
 import streamlit as st
 import pandas as pd
@@ -47,7 +45,6 @@ def render_list_view():
     c_back, c_title, c_void = st.columns([1, 6, 1])
     
     with c_back:
-        # Zmieniamy ikonę i upewniamy się, że to styl "secondary"
         if st.button("⬅️ Wróć", help="Wróć do Kokpitu", use_container_width=False, type="secondary"):
             st.session_state.current_module = "home"
             st.rerun()
@@ -64,24 +61,20 @@ def render_list_view():
         search_query = st.text_input("Szukaj", placeholder="Wpisz imię, rasę lub nr chip...", label_visibility="collapsed")
     
     with c_add:
-        # Ukrywamy przycisk przed Wolontariuszem i DT
         if st.session_state.user_role in ["Admin", "Pracownik"]:
             if st.button("➕ Przyjmij", type="primary", use_container_width=True):
                 st.session_state.view_mode = "admission"
                 st.rerun()
         else:
-             st.write("") # Zostawia puste miejsce dla zablokowanych ról
+             st.write("") 
 
     # --- 3. POBRANIE DANYCH ---
-    # Sprawdzamy, kto jest zalogowany
     rola = st.session_state.user_role
     id_uzytkownika = st.session_state.user_id_osoba
     
-    # Jeśli to DT, pobieramy TYLKO jego zwierzęta
     if rola == "DT":
         df = crud.pobierz_rejestr_rozszerzony(id_opiekun=id_uzytkownika)
     else:
-        # W przeciwnym razie pobieramy wszystko
         df = crud.pobierz_rejestr_rozszerzony()
 
     if df.empty:
@@ -146,7 +139,6 @@ def render_list_view():
     
     cols_to_show = ["Imie", "Gatunek", "Rasa", "Plec", "Wiek", "StatusZwierzecia", "OpiekunNazwa", "NadzorcaNazwa", "IDZwierze"]
     
-    # ZMIANA: Wysokość 700 pikseli, żeby wypełnić monitor!
     event = st.dataframe(
         df[cols_to_show],
         column_config=column_cfg,

@@ -1,8 +1,6 @@
 """
 MODUŁ REJESTRU: LISTA ZWIERZĄT
-------------------------------
-Wyświetla tabelę ze wszystkimi zwierzętami.
-Wersja 3.0 (ORM): Dostosowana do nowego crud.py i modelu danych.
+
 """
 import streamlit as st
 import crud
@@ -11,15 +9,14 @@ import pandas as pd
 def render_list():
     role = st.session_state.user_role
     
-    # 1. Pobieranie słowników (Nowe funkcje CRUD)
+    # 1. Pobieranie słowników 
     gatunki = crud.pobierz_slownik('gatunek')
     statusy = crud.pobierz_slownik('status')
 
-    # 2. Pasek akcji (Przycisk dodawania)
+    # 2. Pasek akcji 
     c_filt, c_act = st.columns([4, 1])
     
     with c_act:
-        # DT nie może dodawać zwierząt, tylko Admin/Wolontariusz
         if role in ["Admin", "Wolontariusz"]:
              if st.button("➕ Przyjmij", type="primary", use_container_width=True):
                 st.session_state.view_mode = "admission"
@@ -38,12 +35,10 @@ def render_list():
             f_txt = st.text_input("Szukaj (Imię/Rasa)")
 
     # 4. Pobieranie danych z bazy
-    # Sprawdzamy, czy to DT. Jeśli tak, przekazujemy ID_Osoba do filtrowania
     id_dla_dt = None
     if role == "DT":
         id_dla_dt = st.session_state.user_id_osoba
     
-    # Pobieramy DataFrame z crud
     df = crud.pobierz_liste_zwierzat(id_opiekun_dt=id_dla_dt)
 
     if df.empty:
@@ -53,28 +48,22 @@ def render_list():
             st.info("Brak zwierząt w bazie.")
         return
 
-    # 5. Logika Filtrowania (W pamięci aplikacji - Pandas)
+    # 5. Logika Filtrowania
     if f_gat:
-        df = df[df['Gatunek'].isin(f_gat)] # Uwaga: w crud.py musimy upewnić się, że pobieramy Gatunek
+        df = df[df['Gatunek'].isin(f_gat)] 
     
-    # Weryfikacja: crud.pobierz_liste_zwierzat zwraca [IDZwierze, Imie, Rasa, StatusZwierzecia, Zdjecie, IDOpiekun]
-    # Brakuje tam Gatunku, więc filtr Gatunku na razie nie zadziała idealnie, chyba że dodasz go do zapytania w crud.
-    # Ale filtr Statusu zadziała.
     
     if f_stat:
         df = df[df['StatusZwierzecia'].isin(f_stat)]
         
     if f_txt:
-        # Szukanie case-insensitive
         mask = df['Imie'].str.contains(f_txt, case=False, na=False) | \
                df['Rasa'].str.contains(f_txt, case=False, na=False)
         df = df[mask]
 
     # 6. Przygotowanie danych do wyświetlenia
-    # Streamlit nie wyświetli BLOBa w tabeli. Zamiast tego dodajmy kolumnę "Foto"
     df['Foto'] = df['Zdjecie'].apply(lambda x: "📸" if x else "❌")
 
-    # Wybieramy i zmieniamy nazwy kolumn do wyświetlenia
     df_display = df[['IDZwierze', 'Foto', 'Imie', 'Rasa', 'StatusZwierzecia']].copy()
     
     # 7. Wyświetlanie interaktywnej tabeli
@@ -95,10 +84,8 @@ def render_list():
         use_container_width=True
     )
 
-    # Obsługa kliknięcia w wiersz
     if len(event.selection.rows) > 0:
         selected_index = event.selection.rows[0]
-        # Pobieramy ID z wyświetlanego dataframe (który jest przefiltrowany)
         wybrane_id = df_display.iloc[selected_index]["IDZwierze"]
         
         st.session_state.active_animal_id = int(wybrane_id)

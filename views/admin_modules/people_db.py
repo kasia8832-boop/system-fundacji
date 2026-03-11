@@ -1,7 +1,6 @@
 """
 MODUŁ ADMINA: BAZA OSÓB
------------------------
-Wersja 6.0: Dodano RODO oraz zakładkę do pełnej Edycji danych.
+
 """
 import streamlit as st
 import crud
@@ -31,7 +30,6 @@ def render_people_db():
     # --- ZAKŁADKA 1: LISTA I RODO ---
     with tab_view:
          if not df_os.empty:
-             # Chowamy "brzydkie" kolumny do wyświetlania w głównej tabeli
              df_view = df_os.drop(columns=['Display', 'AdresUlica', 'AdresNrLokalu', 'AdresKodPocztowy'], errors='ignore')
              st.dataframe(
                  df_view, 
@@ -118,7 +116,6 @@ def render_people_db():
             if df_os.empty:
                 st.info("Brak osób w bazie do edycji.")
             else:
-                # Blokujemy możliwość edycji Anonimów z RODO
                 lista_edycji = {f"{r['Imie']} {r['Nazwisko']} (ID: {r['IDOsoba']})": r for i, r in df_os.iterrows() if r['Nazwisko'] != "(RODO)"}
                 
                 if not lista_edycji:
@@ -127,8 +124,7 @@ def render_people_db():
                     st.markdown("##### Edycja Kontaktu")
                     wybor_edycja = st.selectbox("Wybierz osobę do edycji", list(lista_edycji.keys()), key="sel_edycja")
                     dane = lista_edycji[wybor_edycja]
-                    
-                    # Funkcja czyszcząca 'NaN' z pandasa, żeby w formularzu nie wyświetlało się słowo "nan"
+
                     def clean_val(val):
                         return "" if pd.isna(val) else str(val)
 

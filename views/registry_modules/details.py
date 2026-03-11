@@ -1,14 +1,12 @@
 """
 MODUŁ REJESTRU: SZCZEGÓŁY (LAYOUT)
-----------------------------------
-Wersja 4.0: Czysty, jasny motyw. Usunięto konflikty z globalnym CSS.
+
 """
 import streamlit as st
 import crud
 from views.registry_modules.details_components import side_panel, top_bar, tab_info, tab_medical, tab_history
 
 # --- LOKALNE STYLE KOMPONENTÓW (TYLKO DLA WIDOKU SZCZEGÓŁÓW) ---
-# Globalne tło, przyciski i zakładki są teraz zarządzane przez styles.py!
 LOCAL_CSS = """
 <style>
     /* 1. TYTUŁ ZWIERZĘCIA */
@@ -59,7 +57,6 @@ LOCAL_CSS = """
 """
 
 def render_details():
-    # Wstrzykujemy tylko lokalne style dla zdjęć i kafelków
     st.markdown(LOCAL_CSS, unsafe_allow_html=True)
 
     # 1. Weryfikacja ID
@@ -76,11 +73,9 @@ def render_details():
         st.error("Nie znaleziono zwierzęcia.")
         return
     
-    # Konwersja obiektu na słownik, aby pasował do komponentów
     r = {k: v for k, v in vars(zwierze_obj).items() if not k.startswith('_')}
     r['ID_Zwierze'] = zwierze_obj.IDZwierze 
 
-    # --- UKŁAD STRONY ---
     top_bar.render_top_bar(r, id_zw)
 
     col_left, col_right = st.columns([1.5, 3.5])
@@ -89,7 +84,6 @@ def render_details():
         side_panel.render_side_panel(r)
 
     with col_right:
-        # Zakładki zostaną teraz automatycznie ostylowane przez globalny plik styles.py
         t1, t2, t3 = st.tabs(["📄 Dane", "💉 Zdrowie", "📜 Historia"])
         with t1: tab_info.render_tab(r)
         with t2: tab_medical.render_tab(r)

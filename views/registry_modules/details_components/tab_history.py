@@ -1,8 +1,6 @@
 """
 KOMPONENT KARTY: ZAKŁADKA 'HISTORIA'
-------------------------------------
-Poprawka: Wymuszenie typu int dla ID Historii (naprawa załączników).
-Dodano: Obsługa błędów przy wgrywaniu plików.
+
 """
 import streamlit as st
 import crud
@@ -46,7 +44,7 @@ def render_tab(id_zwierze):
                     id_historia = crud.dodaj_wpis_historii(id_zwierze, current_user_id, kategoria, opis)
                     
                     if id_historia:
-                        # 2. Dodajemy załączniki (z obsługą błędów)
+                        # 2. Dodajemy załączniki 
                         sukces_pliki = 0
                         if pliki:
                             for p in pliki:
@@ -87,7 +85,6 @@ def render_tab(id_zwierze):
 
     st.caption(f"Wyświetlono: {len(df_filtered)} wpisów")
 
-    # Przygotowanie do wyświetlenia
     df_display = df_filtered.copy()
     df_display['Podgląd Opisu'] = df_display['Opis'].apply(lambda x: skroc_tekst(x, 90))
     
@@ -115,10 +112,8 @@ def render_tab(id_zwierze):
     if event.selection.rows:
         idx = event.selection.rows[0]
         
-        # Pobieramy dane z wiersza
         row = df_filtered.iloc[idx]
         
-        # WAŻNE: Rzutowanie na int, żeby baza na pewno zrozumiała ID
         try:
             id_historia = int(row['IDHistoria'])
         except:
@@ -146,7 +141,6 @@ def render_tab(id_zwierze):
             # --- ZAŁĄCZNIKI ---
             st.divider()
             
-            # Pobieramy listę załączników (używając pewnego INT id)
             pliki_df = crud.pobierz_liste_zalacznikow(id_historia)
             
             if not pliki_df.empty:
@@ -164,7 +158,7 @@ def render_tab(id_zwierze):
                                 data=content,
                                 file_name=nazwa,
                                 mime=typ,
-                                key=f"dl_{file_row['ID_Zalacznik']}", # Unikalny klucz
+                                key=f"dl_{file_row['ID_Zalacznik']}",
                                 use_container_width=True
                             )
             else:

@@ -8,7 +8,6 @@ import plotly.express as px
 FUNDACJA_COLORS = ['#3498db', '#2ecc71', '#9b59b6', '#e67e22', '#f1c40f', '#1abc9c']
 
 def apply_light_transparent_layout(fig):
-    # Wymusza przeźroczyste tło, ale ciemne i czytelne napisy!
     fig.update_layout(
         paper_bgcolor='rgba(0,0,0,0)', 
         plot_bgcolor='rgba(0,0,0,0)',  

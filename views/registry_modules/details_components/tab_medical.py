@@ -1,7 +1,6 @@
 """
 KOMPONENT KARTY: ZAKŁADKA 'ZDROWIE'
------------------------------------
-Poprawka: Zmiana 'OpisMedyczny' -> 'OpisZdrowia'.
+
 """
 import streamlit as st
 import pandas as pd
@@ -53,7 +52,6 @@ def render_tab(r):
     # 3. ODROBACZANIE
     st.markdown("##### 💊 Odrobaczanie")
     with st.container(border=True):
-        # Używamy poprawnej nazwy pola
         odrobaczanie = r.get('Odrobaczenie') 
         st.caption("Data ostatniego zabiegu:")
         if odrobaczanie:
@@ -76,7 +74,7 @@ def render_tab(r):
     st.write("")
     st.divider()
 
-    # 5. DODATKOWY OPIS ZDROWIA (POPRAWIONE POLE)
+    # 5. DODATKOWY OPIS ZDROWIA 
     st.markdown("##### 📝 Opis / Notatki Medyczne")
     
     # POPRAWKA NAZWY:
